@@ -55,6 +55,13 @@ ember/ose/dist/
 # Throwaway work, probes and downloads (AGENTS.md "Where files go")
 .scratch/
 
+# vibemap generated files (vibemap/README.md); map.json and progress.md are committed
+vibemap/data/raw.json
+vibemap/data/raw_summary.md
+vibemap/data/_patch.json
+vibemap/out/
+**/__pycache__/
+
 # Editor extension build outputs
 *.vsix
 .vscode-test/

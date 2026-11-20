@@ -1,0 +1,2120 @@
+{
+  "version": 1,
+  "project": {
+    "name": "darkpyonix-ember",
+    "summary": "코딩 에이전트(Claude Code, Codex 등)를 메인 서버 한 곳에서 돌리고, 도구는 여러 컴퓨터에서 실행하는 개발 환경·원격 IDE.",
+    "structure": "layer",
+    "commit": "876186d7",
+    "updated": "2026-11-20",
+    "how_to_run": [
+      {
+        "label": "메인 서버",
+        "cmd": "cd ember/server && cargo build --release --locked && ./target/release/ember-server"
+      },
+      {
+        "label": "클라이언트",
+        "cmd": "cd ember/app && EMBER_SERVER_URL=http://127.0.0.1:8740 cargo run --release --locked"
+      },
+      {
+        "label": "VS Code Web 래퍼",
+        "cmd": "cd ember/proxy && uv run --with-requirements requirements.txt python -m dpx.serve --runtime vsc --root ~/work"
+      }
+    ]
+  },
+  "layers": [
+    {
+      "id": "screen",
+      "name": "화면",
+      "desc": "사람이 보고 누르는 곳: 네이티브 앱, 웹 IDE, IDE 확장",
+      "modules": [
+        "app",
+        "proxy",
+        "extensions"
+      ]
+    },
+    {
+      "id": "client",
+      "name": "클라이언트 코어",
+      "desc": "화면 아래에서 서버 연결, 동기화, 편집기 연결을 맡는 곳",
+      "modules": [
+        "client",
+        "editor",
+        "bridge"
+      ]
+    },
+    {
+      "id": "server",
+      "name": "메인 서버",
+      "desc": "에이전트 실행, 대화 저장, 채널, 컴퓨터 관리",
+      "modules": [
+        "server.core",
+        "server.agents",
+        "server.comm",
+        "server.computers"
+      ]
+    },
+    {
+      "id": "network",
+      "name": "기기·네트워크",
+      "desc": "각 컴퓨터의 실행 데몬, P2P 연결, 파일 전송, 기기 등록",
+      "modules": [
+        "node",
+        "transport",
+        "hub"
+      ]
+    },
+    {
+      "id": "tools",
+      "name": "빌드·문서·도구",
+      "desc": "Code-OSS 빌드, 테스트 벡터, CI 스크립트, 문서",
+      "modules": [
+        "ose",
+        "repo"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "app",
+      "name": "네이티브 앱",
+      "path": "ember/app",
+      "status": "carded",
+      "one_line": "dioxus-compose로 그린 런처와 대화 화면 (ember-app)",
+      "entry_points": [
+        {
+          "name": "main",
+          "at": "ember/app/src/main.rs:7",
+          "what": "앱 시작"
+        },
+        {
+          "name": "Route",
+          "at": "ember/app/src/ui/mod.rs:54",
+          "what": "화면 목록 (프로젝트, 세션, 채널 등)"
+        },
+        {
+          "name": "Services",
+          "at": "ember/app/src/services.rs:28",
+          "what": "설정·런타임·서버 연결 묶음"
+        },
+        {
+          "name": "ServerError",
+          "at": "ember/app/src/server.rs:18",
+          "what": "서버 호출 실패 종류"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Services",
+          "at": "ember/app/src/services.rs:28",
+          "what": "화면이 서버·클라이언트에 접근하는 입구",
+          "breaks_if": "UI 파일 15곳"
+        },
+        {
+          "name": "status_label",
+          "at": "ember/app/src/model.rs:31",
+          "what": "세션 상태 표시 문구",
+          "breaks_if": "UI 16곳의 상태 표시"
+        },
+        {
+          "name": "Scheme",
+          "at": "ember/app/src/ui/theme.rs:17",
+          "what": "라이트·다크 색 체계",
+          "breaks_if": "UI 29곳의 색"
+        },
+        {
+          "name": "Prefs",
+          "at": "ember/app/src/prefs.rs:33",
+          "what": "사용자 설정 저장 형식",
+          "breaks_if": "저장된 설정 읽기 실패 (6곳)"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "화면에 server answered 4xx/5xx가 뜸",
+          "check": "ember/app/src/server.rs:18"
+        },
+        {
+          "symptom": "앱이 서버에 연결 못 함",
+          "check": "ember/app/src/services.rs:28"
+        },
+        {
+          "symptom": "터미널 창이 안 붙음",
+          "check": "ember/app/src/terminal_stream.rs:52"
+        }
+      ],
+      "cautions": [
+        "webview 금지: dioxus-compose만 사용 (CI 검사)",
+        "UI 폴더는 6만 줄: 파일 통째로 읽지 말고 Route부터"
+      ]
+    },
+    {
+      "id": "proxy",
+      "name": "VS Code Web 래퍼",
+      "path": "ember/proxy",
+      "status": "carded",
+      "one_line": "Python FastAPI로 VS Code Web을 감싸 로그인·터미널·허브를 붙임",
+      "entry_points": [
+        {
+          "name": "route_request",
+          "at": "ember/proxy/main.py:192",
+          "what": "모든 요청이 먼저 지나가는 미들웨어"
+        },
+        {
+          "name": "websocket_proxy",
+          "at": "ember/proxy/main.py:265",
+          "what": "VS Code Web 웹소켓 중계"
+        },
+        {
+          "name": "login",
+          "at": "ember/proxy/dpx/auth/api.py:182",
+          "what": "로그인과 세션 쿠키"
+        },
+        {
+          "name": "UPSTREAM_PORT",
+          "at": "ember/proxy/dpx/config.py:16",
+          "what": "뒤에 있는 VS Code 서버 포트"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "UPSTREAM_BASE",
+          "at": "ember/proxy/dpx/config.py:18",
+          "what": "중계할 VS Code 서버 주소",
+          "breaks_if": "dpx 11곳, 화면 전체가 안 뜸"
+        },
+        {
+          "name": "validate_session",
+          "at": "ember/proxy/dpx/auth/api.py:103",
+          "what": "쿠키 세션 확인",
+          "breaks_if": "로그인 게이트 전체"
+        },
+        {
+          "name": "is_allowed",
+          "at": "ember/proxy/dpx/vscode/roots.py:40",
+          "what": "열 수 있는 폴더 제한",
+          "breaks_if": "폴더 열기 5곳"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "사용자 이름 또는 비밀번호가 올바르지 않습니다",
+          "check": "ember/proxy/dpx/auth/api.py:193"
+        },
+        {
+          "symptom": "VS Code 화면이 안 뜨고 502",
+          "check": "ember/proxy/dpx/config.py:16"
+        },
+        {
+          "symptom": "웹 IDE가 멈춤 (요청이 안 끝남)",
+          "check": "ember/proxy/main.py:196"
+        }
+      ],
+      "cautions": [
+        "Rust 앱과 별개인 Python 서버: uv로 실행",
+        "darkpyonix.db는 로컬 사용자 DB: 커밋 금지"
+      ]
+    },
+    {
+      "id": "extensions",
+      "name": "IDE 확장",
+      "path": "extensions",
+      "status": "carded",
+      "one_line": "VS Code·IntelliJ에서 darkpyonix 관리자와 협업을 쓰게 하는 확장",
+      "entry_points": [
+        {
+          "name": "activate",
+          "at": "extensions/vscode-darkpyonix/src/extension.ts:26",
+          "what": "VS Code 확장 시작"
+        },
+        {
+          "name": "ManagerClient",
+          "at": "extensions/vscode-darkpyonix/src/manager/client.ts:34",
+          "what": "darkpyonix 관리자 API 호출"
+        },
+        {
+          "name": "NotebookSession",
+          "at": "extensions/intellij-darkpyonix/src/main/kotlin/dev/darkpyonix/intellij/notebook/NotebookSession.kt:56",
+          "what": "IntelliJ 노트북 세션"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Kernel",
+          "at": "extensions/vscode-darkpyonix/src/manager/types.ts:6",
+          "what": "관리자 API 타입",
+          "breaks_if": "VS Code 확장 11곳"
+        },
+        {
+          "name": "darkpyonixHome",
+          "at": "extensions/vscode-darkpyonix/src/manager/discovery.ts:26",
+          "what": "관리자 찾기 (DARKPYONIX_HOME)",
+          "breaks_if": "관리자 자동 연결"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "확장이 관리자를 못 찾음",
+          "check": "extensions/vscode-darkpyonix/src/manager/discovery.ts:61"
+        },
+        {
+          "symptom": "노트북 출력이 실시간으로 안 옴",
+          "check": "extensions/vscode-darkpyonix/src/manager/sse.ts:86"
+        }
+      ],
+      "cautions": [
+        "관리자 API는 darkpyonix-core 소관: 타입을 손으로 맞춤",
+        "VS Code·IntelliJ 두 구현을 함께 바꿀 것"
+      ]
+    },
+    {
+      "id": "client",
+      "name": "클라이언트 코어",
+      "path": "ember/client",
+      "status": "carded",
+      "one_line": "서버 연결, 동기화, 상태 모델 (UI 아래층)",
+      "entry_points": [
+        {
+          "name": "Client",
+          "at": "ember/client/src/client.rs:96",
+          "what": "서버 연결·동기화 본체"
+        },
+        {
+          "name": "start",
+          "at": "ember/client/src/client.rs:138",
+          "what": "연결과 푸시 수신 시작"
+        },
+        {
+          "name": "decode",
+          "at": "ember/client/src/push.rs:74",
+          "what": "서버 푸시 메시지 해석"
+        },
+        {
+          "name": "Transcript",
+          "at": "ember/client/src/transcript.rs:83",
+          "what": "대화 기록 상태"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "AgentEvent",
+          "at": "ember/client/src/wire.rs:67",
+          "what": "서버 이벤트의 클라이언트 쪽 복사본",
+          "breaks_if": "서버 events.rs와 어긋나면 대화 표시 깨짐"
+        },
+        {
+          "name": "ConnectionState",
+          "at": "ember/client/src/state.rs:55",
+          "what": "연결 상태",
+          "breaks_if": "앱 상단 연결 표시"
+        },
+        {
+          "name": "ApiError",
+          "at": "ember/client/src/api.rs:37",
+          "what": "API 호출 실패 종류",
+          "breaks_if": "앱 오류 처리"
+        },
+        {
+          "name": "load",
+          "at": "ember/client/src/cache.rs:21",
+          "what": "마지막 상태 캐시 읽기",
+          "breaks_if": "앱 즉시 시작"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "대화 화면이 실시간으로 갱신 안 됨",
+          "check": "ember/client/src/client.rs:180"
+        },
+        {
+          "symptom": "새 이벤트 종류가 화면에 안 나옴",
+          "check": "ember/client/src/push.rs:70"
+        },
+        {
+          "symptom": "컴퓨터가 계속 오프라인 표시",
+          "check": "ember/client/src/state.rs:33"
+        }
+      ],
+      "cautions": [
+        "wire.rs는 서버 타입을 손으로 복사: 서버와 함께 바꿀 것"
+      ]
+    },
+    {
+      "id": "editor",
+      "name": "편집기 코어",
+      "path": [
+        "ember/editor",
+        "ember/editor-conn"
+      ],
+      "status": "carded",
+      "one_line": "Code-OSS 서버에 붙는 Rust 클라이언트와 편집 세션 층",
+      "entry_points": [
+        {
+          "name": "EditorSession",
+          "at": "ember/editor/src/session.rs:117",
+          "what": "편집 세션 본체"
+        },
+        {
+          "name": "connect_tcp_or_fallback",
+          "at": "ember/editor/src/session.rs:142",
+          "what": "Code-OSS 연결, 실패 시 웹 대체"
+        },
+        {
+          "name": "Connection",
+          "at": "ember/editor-conn/src/connection.rs:60",
+          "what": "Code-OSS 서버 소켓 연결"
+        },
+        {
+          "name": "initialize",
+          "at": "ember/editor-conn/src/exthost.rs:204",
+          "what": "확장 호스트 초기화"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "WidgetPos",
+          "at": "ember/editor/src/coords.rs:21",
+          "what": "편집기 좌표와 확장 호스트 좌표 변환",
+          "breaks_if": "편집기 12곳, 커서·하이라이트 어긋남"
+        },
+        {
+          "name": "RpcMessage",
+          "at": "ember/editor-conn/src/rpc.rs:108",
+          "what": "확장 호스트 RPC 메시지",
+          "breaks_if": "Code-OSS 버전과 프로토콜 불일치"
+        },
+        {
+          "name": "Frame",
+          "at": "ember/editor-conn/src/frame.rs:55",
+          "what": "소켓 프레임 형식",
+          "breaks_if": "연결 전체"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "편집기 대신 VS Code Web으로 열림",
+          "check": "ember/editor/src/fallback.rs:61"
+        },
+        {
+          "symptom": "편집기 연결이 갑자기 끊김",
+          "check": "ember/editor-conn/src/connection.rs:25"
+        },
+        {
+          "symptom": "하이라이트·커서 위치가 어긋남",
+          "check": "ember/editor/src/coords.rs:32"
+        }
+      ],
+      "cautions": [
+        "Code-OSS 내부 프로토콜을 따라감: OSE 버전을 올리면 rpc·exthost 확인"
+      ]
+    },
+    {
+      "id": "bridge",
+      "name": "IDE 창 브리지",
+      "path": "ember/bridge",
+      "status": "carded",
+      "one_line": "IDE 창(webview)과 네이티브 사이의 버전 있는 메시지",
+      "entry_points": [
+        {
+          "name": "BridgeHost",
+          "at": "ember/bridge/src/host.rs:29",
+          "what": "webview에서 온 메시지 처리"
+        },
+        {
+          "name": "WebviewBridge",
+          "at": "ember/bridge/src/bridge.rs:27",
+          "what": "네이티브↔webview 통로"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "HANDLER_NAME",
+          "at": "ember/bridge/src/messages.rs:24",
+          "what": "webview 쪽 핸들러 이름",
+          "breaks_if": "IDE 창 스크립트와 연결 끊김"
+        },
+        {
+          "name": "KIND_TAB_DETACH",
+          "at": "ember/bridge/src/messages.rs:26",
+          "what": "메시지 종류 문자열",
+          "breaks_if": "탭 분리·창 열기 동작"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "IDE 탭을 떼어도 새 창이 안 열림",
+          "check": "ember/bridge/src/host.rs:68"
+        }
+      ],
+      "cautions": [
+        "메시지 문자열은 ember/vectors/bridge 테스트 벡터와 같아야 함"
+      ]
+    },
+    {
+      "id": "server.core",
+      "name": "서버 뼈대·API",
+      "path": "ember/server",
+      "status": "carded",
+      "one_line": "ember-server 시작, HTTP API, door, 기기·허브 연동, 테스트",
+      "entry_points": [
+        {
+          "name": "main",
+          "at": "ember/server/src/main.rs:79",
+          "what": "서버 시작, 환경 변수 읽기"
+        },
+        {
+          "name": "router",
+          "at": "ember/server/src/api/mod.rs:78",
+          "what": "HTTP API 경로 목록"
+        },
+        {
+          "name": "Sessions",
+          "at": "ember/server/src/session.rs:225",
+          "what": "세션 생성·메시지·승인·중단"
+        },
+        {
+          "name": "Store",
+          "at": "ember/server/src/store.rs:81",
+          "what": "SQLite 저장소 (세션·이벤트)"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Store",
+          "at": "ember/server/src/store.rs:81",
+          "what": "세션·이벤트 저장과 조회",
+          "breaks_if": "서버 모듈 28곳, 마이그레이션 순서"
+        },
+        {
+          "name": "AgentEvent",
+          "at": "ember/server/src/events.rs:12",
+          "what": "대화 이벤트 종류",
+          "breaks_if": "17곳과 클라이언트 표시, 저장된 기록 해석"
+        },
+        {
+          "name": "Sessions",
+          "at": "ember/server/src/session.rs:225",
+          "what": "세션 조작 API",
+          "breaks_if": "API·A2A·채널·컴퓨터 등 15곳"
+        },
+        {
+          "name": "protect",
+          "at": "ember/server/src/auth.rs:176",
+          "what": "토큰으로 API 보호",
+          "breaks_if": "모든 클라이언트 접속"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "클라이언트가 서버에 못 붙음 (401/403)",
+          "check": "ember/server/src/auth.rs:63"
+        },
+        {
+          "symptom": "서버가 시작하다 바로 죽음 (bind 실패)",
+          "check": "ember/server/src/main.rs:359"
+        },
+        {
+          "symptom": "세션을 찾을 수 없다는 오류",
+          "check": "ember/server/src/session.rs:57"
+        }
+      ],
+      "cautions": [
+        "기본 리스너는 로그인 없음: 127.0.0.1 밖으로 열지 말 것",
+        "store 마이그레이션은 순서 의존: 중간 삽입 금지"
+      ]
+    },
+    {
+      "id": "server.agents",
+      "name": "에이전트·계정",
+      "path": [
+        "ember/server/src/agents",
+        "ember/server/src/history",
+        "ember/server/src/accounts",
+        "ember/server/src/chatgpt",
+        "ember/server/src/mcp"
+      ],
+      "status": "carded",
+      "one_line": "에이전트 CLI를 감싸 실행하고 기록·계정·MCP를 관리",
+      "entry_points": [
+        {
+          "name": "AgentAdapter",
+          "at": "ember/server/src/agents/mod.rs:320",
+          "what": "에이전트 하나를 감싸는 공통 인터페이스"
+        },
+        {
+          "name": "AgentKind",
+          "at": "ember/server/src/agents/mod.rs:33",
+          "what": "claude-code, codex, antigravity, ACP 구분"
+        },
+        {
+          "name": "spawn_agent",
+          "at": "ember/server/src/agents/proc.rs:275",
+          "what": "CLI 프로세스 실행"
+        },
+        {
+          "name": "route",
+          "at": "ember/server/src/accounts/mod.rs:508",
+          "what": "새 세션에 쓸 계정 고르기"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "AgentKind",
+          "at": "ember/server/src/agents/mod.rs:33",
+          "what": "에이전트 종류와 저장 문자열",
+          "breaks_if": "DB에 저장된 세션·API 입력 해석, 서버 모듈 15곳"
+        },
+        {
+          "name": "StartRequest",
+          "at": "ember/server/src/agents/mod.rs:159",
+          "what": "에이전트 시작 요청 값",
+          "breaks_if": "모든 어댑터 start, MCP·계정 설정 훅"
+        },
+        {
+          "name": "Accounts",
+          "at": "ember/server/src/accounts/mod.rs:138",
+          "what": "계정 목록·기본값·사용 한도",
+          "breaks_if": "chatgpt, hub, 서버 시작 등 4곳"
+        },
+        {
+          "name": "SecretBox",
+          "at": "ember/server/src/accounts/secrets.rs:42",
+          "what": "서버 비밀값 암호화 키",
+          "breaks_if": "저장된 API 키·MCP 비밀값을 못 읽음 (3곳)"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "에이전트가 '사용할 수 없음'으로 나옴",
+          "check": "ember/server/src/agents/claude_code.rs:321"
+        },
+        {
+          "symptom": "세션 시작 시 failed to start 오류",
+          "check": "ember/server/src/agents/proc.rs:299"
+        },
+        {
+          "symptom": "사용 한도 걸린 계정이 계속 선택됨",
+          "check": "ember/server/src/accounts/mod.rs:629"
+        }
+      ],
+      "cautions": [
+        "AgentKind 문자열은 DB에 저장됨: 이름 변경 시 기존 세션이 깨짐",
+        "CLI 버전마다 출력 형식이 달라 어댑터 파서가 깨질 수 있음"
+      ]
+    },
+    {
+      "id": "server.comm",
+      "name": "에이전트 간 통신",
+      "path": [
+        "ember/server/src/a2a",
+        "ember/server/src/channels",
+        "ember/server/src/schedules"
+      ],
+      "status": "carded",
+      "one_line": "A2A 큐, 채널(방), 예약 실행(루틴)",
+      "entry_points": [
+        {
+          "name": "A2a",
+          "at": "ember/server/src/a2a/mod.rs:163",
+          "what": "세션 사이 메시지 큐"
+        },
+        {
+          "name": "send",
+          "at": "ember/server/src/a2a/mod.rs:800",
+          "what": "다른 세션에 메시지 보내기"
+        },
+        {
+          "name": "post_channel_message",
+          "at": "ember/server/src/channels/mod.rs:443",
+          "what": "채널에 글 올리기"
+        },
+        {
+          "name": "tick",
+          "at": "ember/server/src/schedules/mod.rs:670",
+          "what": "예약된 루틴 실행 시점 확인"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "A2a",
+          "at": "ember/server/src/a2a/mod.rs:163",
+          "what": "A2A 전달·대상 목록",
+          "breaks_if": "서버 시작, 루틴 실행 2곳"
+        },
+        {
+          "name": "Message",
+          "at": "ember/server/src/channels/mod.rs:121",
+          "what": "채널 메시지 형식",
+          "breaks_if": "A2A·채널 API·클라이언트 표시"
+        },
+        {
+          "name": "neutralize_guest_text",
+          "at": "ember/server/src/a2a/channel.rs:65",
+          "what": "손님 글을 에이전트용으로 무력화",
+          "breaks_if": "채널 손님 글의 프롬프트 주입 방어"
+        },
+        {
+          "name": "Scheduler",
+          "at": "ember/server/src/schedules/mod.rs:329",
+          "what": "루틴 저장과 실행",
+          "breaks_if": "서버 시작 2곳"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "다른 세션에 보낸 메시지가 도착 안 함",
+          "check": "ember/server/src/a2a/mod.rs:950"
+        },
+        {
+          "symptom": "채널 글이 거부됨 (너무 많음)",
+          "check": "ember/server/src/a2a/mod.rs:64"
+        },
+        {
+          "symptom": "루틴이 정해진 시각에 안 돎",
+          "check": "ember/server/src/schedules/mod.rs:670"
+        }
+      ],
+      "cautions": [
+        "A2A는 HTTP와 CLI(a2a 바이너리)로 연결돼 import로 안 보임",
+        "손님(guest) 글 처리 코드를 바꾸면 보안 경계가 바뀜"
+      ]
+    },
+    {
+      "id": "server.computers",
+      "name": "컴퓨터·프로젝트",
+      "path": [
+        "ember/server/src/computers",
+        "ember/server/src/projects",
+        "ember/server/src/browser"
+      ],
+      "status": "carded",
+      "one_line": "연결된 컴퓨터, 프로젝트, 원격 브라우저 관리",
+      "entry_points": [
+        {
+          "name": "Computers",
+          "at": "ember/server/src/computers/mod.rs:676",
+          "what": "연결된 컴퓨터 목록과 상태"
+        },
+        {
+          "name": "switch",
+          "at": "ember/server/src/computers/mod.rs:1081",
+          "what": "세션을 다른 컴퓨터로 옮기기"
+        },
+        {
+          "name": "mint",
+          "at": "ember/server/src/computers/enrol.rs:911",
+          "what": "컴퓨터 등록 코드 발급"
+        },
+        {
+          "name": "open",
+          "at": "ember/server/src/browser/mod.rs:159",
+          "what": "원격 브라우저 열기"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Computer",
+          "at": "ember/server/src/computers/mod.rs:85",
+          "what": "컴퓨터 한 대의 정보",
+          "breaks_if": "서버·API·허브·프로젝트 10곳"
+        },
+        {
+          "name": "LOCAL",
+          "at": "ember/server/src/computers/mod.rs:71",
+          "what": "메인 서버 자신을 뜻하는 id",
+          "breaks_if": "A2A·저장된 세션의 컴퓨터 해석"
+        },
+        {
+          "name": "Project",
+          "at": "ember/server/src/projects/mod.rs:51",
+          "what": "프로젝트 정보·설정",
+          "breaks_if": "서버·API 3곳"
+        },
+        {
+          "name": "redeem",
+          "at": "ember/server/src/computers/enrol.rs:944",
+          "what": "노드가 등록 코드 사용",
+          "breaks_if": "ember-node 등록 절차"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "컴퓨터가 오프라인(unreachable)으로 나옴",
+          "check": "ember/server/src/computers/mod.rs:1414"
+        },
+        {
+          "symptom": "세션을 다른 컴퓨터로 못 옮김",
+          "check": "ember/server/src/computers/mod.rs:1081"
+        },
+        {
+          "symptom": "등록 코드가 바로 만료됨",
+          "check": "ember/server/src/computers/enrol.rs:944"
+        },
+        {
+          "symptom": "브라우저가 안 열림 (Chrome 없음)",
+          "check": "ember/server/src/browser/chrome.rs:14"
+        }
+      ],
+      "cautions": [
+        "등록 코드 오류는 모든 실패를 같은 응답으로 숨김: 원인은 서버 로그로",
+        "mount는 OS별 명령(NFS 등)이 달라 플랫폼마다 따로 확인"
+      ]
+    },
+    {
+      "id": "node",
+      "name": "실행 노드",
+      "path": "ember/node",
+      "status": "carded",
+      "one_line": "각 컴퓨터에서 도구 동작(빌드, 터미널 등)을 실행하는 데몬",
+      "entry_points": [
+        {
+          "name": "main",
+          "at": "ember/node/src/main.rs:44",
+          "what": "노드 시작, EMBER_NODE_* 환경 변수"
+        },
+        {
+          "name": "serve",
+          "at": "ember/node/src/api.rs:147",
+          "what": "노드 HTTP API"
+        },
+        {
+          "name": "PathPolicy",
+          "at": "ember/node/src/policy.rs:31",
+          "what": "접근 허용 경로 검사"
+        },
+        {
+          "name": "Terms",
+          "at": "ember/node/src/term/mod.rs:66",
+          "what": "원격 터미널 관리"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "ErrorCode",
+          "at": "ember/node/src/proto.rs:48",
+          "what": "노드 오류 코드",
+          "breaks_if": "서버의 노드 클라이언트 해석"
+        },
+        {
+          "name": "Health",
+          "at": "ember/node/src/proto.rs:71",
+          "what": "노드 상태 응답",
+          "breaks_if": "서버의 컴퓨터 온라인 판단"
+        },
+        {
+          "name": "Jobs",
+          "at": "ember/node/src/jobs.rs:58",
+          "what": "실행 중 작업 목록",
+          "breaks_if": "터미널·exec 4곳"
+        },
+        {
+          "name": "NodeStream",
+          "at": "ember/node/src/client.rs:51",
+          "what": "서버가 쓰는 노드 클라이언트",
+          "breaks_if": "ember-server 빌드 (path 의존)"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "파일 접근이 forbidden path로 거부됨",
+          "check": "ember/node/src/api.rs:281"
+        },
+        {
+          "symptom": "노드가 시작 안 함 (토큰 없음)",
+          "check": "ember/node/src/main.rs:13"
+        },
+        {
+          "symptom": "터미널 출력이 잘리거나 멈춤",
+          "check": "ember/node/src/term/session.rs:33"
+        }
+      ],
+      "cautions": [
+        "ember-server가 path로 의존: 바꾸면 server·client Cargo.lock도 갱신",
+        "EMBER_NODE_ROOTS 밖 경로는 일부러 막음"
+      ]
+    },
+    {
+      "id": "transport",
+      "name": "전송·파일 전달",
+      "path": [
+        "ember/transport",
+        "ember/transfer"
+      ],
+      "status": "carded",
+      "one_line": "iroh·letify P2P 연결과 기기 간 파일 전송",
+      "entry_points": [
+        {
+          "name": "Transport",
+          "at": "ember/transport/src/lib.rs:324",
+          "what": "P2P 연결 하나의 공통 입구"
+        },
+        {
+          "name": "bind",
+          "at": "ember/transport/src/lib.rs:342",
+          "what": "설정으로 백엔드(iroh·letify) 띄우기"
+        },
+        {
+          "name": "TransportConfig",
+          "at": "ember/transport/src/config.rs:270",
+          "what": "백엔드·릴레이 설정, 환경 변수"
+        },
+        {
+          "name": "Service",
+          "at": "ember/transfer/src/session.rs:230",
+          "what": "파일 전송 받기·보내기"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "connect",
+          "at": "ember/transport/src/lib.rs:368",
+          "what": "상대 기기·서비스로 연결",
+          "breaks_if": "server·node·client·hub·transfer 전부"
+        },
+        {
+          "name": "PeerGate",
+          "at": "ember/transport/src/gate.rs:31",
+          "what": "허용된 기기만 받기",
+          "breaks_if": "기기 차단·해제 동작"
+        },
+        {
+          "name": "WIRE_VERSION",
+          "at": "ember/transfer/src/wire.rs:11",
+          "what": "파일 전송 메시지 버전",
+          "breaks_if": "버전 다른 기기끼리 전송 실패"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "다른 컴퓨터에 연결이 안 됨 (P2P)",
+          "check": "ember/transport/src/config.rs:48"
+        },
+        {
+          "symptom": "연결이 not allowed로 끊김",
+          "check": "ember/transport/src/gate.rs:24"
+        },
+        {
+          "symptom": "파일 전송이 크기 제한으로 거부됨",
+          "check": "ember/transfer/src/limits.rs:38"
+        }
+      ],
+      "cautions": [
+        "mem.rs는 테스트용 가짜 네트워크",
+        "transfer는 transport에 path 의존: 함께 빌드 확인"
+      ]
+    },
+    {
+      "id": "hub",
+      "name": "허브 클라이언트",
+      "path": "ember/hub",
+      "status": "carded",
+      "one_line": "darkpyonix.dev 허브에 기기 등록, 기기 목록, 주소록",
+      "entry_points": [
+        {
+          "name": "HubClient",
+          "at": "ember/hub/src/client.rs:89",
+          "what": "darkpyonix.dev 허브 API 호출"
+        },
+        {
+          "name": "Registration",
+          "at": "ember/hub/src/registration.rs:27",
+          "what": "이 기기의 허브 등록 정보 파일"
+        },
+        {
+          "name": "devices",
+          "at": "ember/hub/src/client.rs:303",
+          "what": "내 기기 목록"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Device",
+          "at": "ember/hub/src/types.rs:41",
+          "what": "기기 정보 형식",
+          "breaks_if": "node·server 7곳"
+        },
+        {
+          "name": "HubError",
+          "at": "ember/hub/src/client.rs:33",
+          "what": "허브 오류, 기기 삭제 판단",
+          "breaks_if": "등록 해제 처리 5곳"
+        },
+        {
+          "name": "claim",
+          "at": "ember/hub/src/client.rs:246",
+          "what": "링크 코드로 기기 연결",
+          "breaks_if": "기기 연결 절차"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "기기가 허브에서 사라짐 (401)",
+          "check": "ember/hub/src/client.rs:82"
+        },
+        {
+          "symptom": "기기 목록이 갱신 안 됨",
+          "check": "ember/hub/src/watch.rs:35"
+        }
+      ],
+      "cautions": [
+        "허브 서버 API는 darkpyonix-core 소관: 여기는 클라이언트만",
+        "fake 기능(feature)은 테스트 전용"
+      ]
+    },
+    {
+      "id": "ose",
+      "name": "Code-OSS 빌드·벡터",
+      "path": [
+        "ember/ose",
+        "ember/vectors"
+      ],
+      "status": "carded",
+      "one_line": "Code-OSS 빌드 파이프라인과 공유 테스트 벡터",
+      "entry_points": [
+        {
+          "name": "build.sh",
+          "at": "ember/ose/build.sh",
+          "what": "Code-OSS 웹 서버(OSE) 빌드"
+        },
+        {
+          "name": "regress.py",
+          "at": "ember/ose/regression/regress.py:1",
+          "what": "확장 활성화 회귀 비교"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "detach_vectors.json",
+          "at": "ember/vectors/bridge/detach_vectors.json",
+          "what": "브리지 메시지 테스트 벡터",
+          "breaks_if": "bridge·proxy 탭 분리 테스트"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "로컬에서 build.sh가 거부됨",
+          "check": "ember/ose/build.sh:10"
+        },
+        {
+          "symptom": "product.json 검사 실패",
+          "check": "ember/ose/check-product.sh"
+        }
+      ],
+      "cautions": [
+        "전체 빌드는 수십 분·8GB: CI(test-ose.yml)에서만"
+      ]
+    },
+    {
+      "id": "repo",
+      "name": "저장소·문서·CI",
+      "path": ".",
+      "status": "carded",
+      "one_line": "루트 문서, docs, CI 스크립트와 저장소 검사",
+      "entry_points": [
+        {
+          "name": "AGENTS.md",
+          "at": "AGENTS.md",
+          "what": "작업 규칙 (빌드, git, 문체)"
+        },
+        {
+          "name": "SPEC.md",
+          "at": "docs/SPEC.md",
+          "what": "요구사항 ID"
+        },
+        {
+          "name": "test.yml",
+          "at": ".github/workflows/test.yml",
+          "what": "기본 CI"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "check-no-webview.sh",
+          "at": ".github/scripts/checks/check-no-webview.sh",
+          "what": "앱·클라이언트에 webview 금지",
+          "breaks_if": "webview 추가 시 CI 실패"
+        },
+        {
+          "name": "check-no-em-dash.sh",
+          "at": ".github/scripts/checks/check-no-em-dash.sh",
+          "what": "문서·코드에 em-dash 금지",
+          "breaks_if": "CI 실패"
+        }
+      ],
+      "problems": [
+        {
+          "symptom": "CI가 webview 검사에서 실패",
+          "check": ".github/scripts/checks/check-no-webview.sh:4"
+        },
+        {
+          "symptom": "develop→main 동기화 실패",
+          "check": ".github/scripts/release/sync-release.sh"
+        }
+      ],
+      "cautions": [
+        "루트에 새 폴더·파일은 사용자 승인 후만",
+        "docs/guide는 en·ko 두 벌: 함께 고칠 것"
+      ]
+    }
+  ],
+  "symptoms": [
+    {
+      "id": "S1",
+      "category": "연결",
+      "symptom": "앱을 켰는데 서버에 연결이 안 됨",
+      "keywords": [
+        "missing or wrong server token",
+        "401",
+        "EMBER_SERVER_URL",
+        "연결 안 됨"
+      ],
+      "modules": [
+        "app",
+        "client",
+        "server.core"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/auth.rs:269",
+          "why": "토큰이 없거나 틀리면 401",
+          "name": "missing or wrong server token"
+        },
+        {
+          "at": "ember/server/src/auth.rs:63",
+          "why": "서버 토큰 파일 생성·읽기",
+          "name": "load_or_create_token"
+        },
+        {
+          "at": "ember/app/src/services.rs:28",
+          "why": "앱 쪽 서버 주소·설정",
+          "name": "Services"
+        }
+      ],
+      "steps": [
+        "서버가 떠 있는지: curl 127.0.0.1:8740/api/health",
+        "앱의 EMBER_SERVER_URL 값",
+        "~/.ember/server-token과 EMBER_SERVER_TOKEN 일치 여부"
+      ]
+    },
+    {
+      "id": "S2",
+      "category": "연결",
+      "symptom": "다른 컴퓨터 주소로 접속하면 거부됨",
+      "keywords": [
+        "host not allowed",
+        "origin not allowed",
+        "403",
+        "EMBER_ALLOWED_HOSTS"
+      ],
+      "modules": [
+        "server.core"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/auth.rs:261",
+          "why": "허용 안 된 Host 헤더 거부",
+          "name": "host not allowed"
+        },
+        {
+          "at": "ember/server/src/api/origin.rs:32",
+          "why": "Origin 검사",
+          "name": "origin_allowed"
+        }
+      ],
+      "steps": [
+        "EMBER_LISTEN이 127.0.0.1인지",
+        "EMBER_ALLOWED_HOSTS에 접속 주소가 있는지"
+      ]
+    },
+    {
+      "id": "S3",
+      "category": "연결",
+      "symptom": "서버가 켜지자마자 꺼짐",
+      "keywords": [
+        "cannot bind",
+        "address in use",
+        "schema version",
+        "newer than this server"
+      ],
+      "modules": [
+        "server.core"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/main.rs:359",
+          "why": "포트 bind 실패",
+          "name": "bind"
+        },
+        {
+          "at": "ember/server/src/store.rs:177",
+          "why": "DB가 더 새 버전이면 시작 거부",
+          "name": "newer than this server"
+        }
+      ],
+      "steps": [
+        "8740 포트를 다른 프로세스가 쓰는지",
+        "서버를 옛 버전으로 되돌렸는지 (ember.db 버전)"
+      ]
+    },
+    {
+      "id": "S4",
+      "category": "에이전트",
+      "symptom": "에이전트 목록에 Claude/Codex가 없거나 쓸 수 없음",
+      "keywords": [
+        "is not available on this server",
+        "detect",
+        "준비 중입니다"
+      ],
+      "modules": [
+        "server.agents",
+        "app"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/agents/claude_code.rs:321",
+          "why": "CLI 설치 여부 확인",
+          "name": "detect"
+        },
+        {
+          "at": "ember/server/src/session.rs:60",
+          "why": "사용 불가 에이전트 오류",
+          "name": "AgentUnavailable"
+        },
+        {
+          "at": "ember/server/src/agents/mod.rs:122",
+          "why": "이름으로 에이전트 찾기",
+          "name": "parse"
+        }
+      ],
+      "steps": [
+        "서버 컴퓨터에서 claude --version, codex --version",
+        "서버 PATH에 CLI가 있는지"
+      ]
+    },
+    {
+      "id": "S5",
+      "category": "에이전트",
+      "symptom": "세션을 만들면 바로 실패함",
+      "keywords": [
+        "failed to start",
+        "creating MCP config file",
+        "account not found"
+      ],
+      "modules": [
+        "server.agents",
+        "server.core"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/agents/proc.rs:299",
+          "why": "CLI 프로세스 실행 실패",
+          "name": "failed to start"
+        },
+        {
+          "at": "ember/server/src/accounts/mod.rs:508",
+          "why": "계정 선택 실패",
+          "name": "route"
+        },
+        {
+          "at": "ember/server/src/agents/claude_code.rs:195",
+          "why": "MCP 설정 파일 생성 실패",
+          "name": "creating MCP config file"
+        }
+      ],
+      "steps": [
+        "서버 로그의 첫 오류 줄",
+        "선택한 계정이 로그인돼 있는지"
+      ]
+    },
+    {
+      "id": "S6",
+      "category": "에이전트",
+      "symptom": "사용 한도에 걸렸다며 대화가 멈춤",
+      "keywords": [
+        "usage limit",
+        "rate limit",
+        "429",
+        "hit your limit",
+        "quota"
+      ],
+      "modules": [
+        "server.agents"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/accounts/mod.rs:629",
+          "why": "한도 메시지 인식",
+          "name": "limit_in_message"
+        },
+        {
+          "at": "ember/server/src/accounts/mod.rs:101",
+          "why": "계정이 한도 상태인지",
+          "name": "limited_at"
+        }
+      ],
+      "steps": [
+        "홈 화면의 계정별 사용량",
+        "다른 계정이 등록돼 있는지"
+      ]
+    },
+    {
+      "id": "S7",
+      "category": "대화",
+      "symptom": "승인 요청에 답했는데 에이전트가 계속 기다림",
+      "keywords": [
+        "unknown approval",
+        "approval",
+        "승인"
+      ],
+      "modules": [
+        "server.core",
+        "server.agents",
+        "client"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/session.rs:845",
+          "why": "승인 답변 전달",
+          "name": "answer"
+        },
+        {
+          "at": "ember/server/src/agents/claude_code.rs:732",
+          "why": "모르는 승인 id",
+          "name": "unknown approval"
+        },
+        {
+          "at": "ember/server/src/events.rs:32",
+          "why": "승인 요청 이벤트",
+          "name": "ApprovalRequested"
+        }
+      ],
+      "steps": [
+        "서버가 재시작된 뒤인지 (대기 승인 복원)",
+        "같은 세션을 다른 클라이언트에서 이미 답했는지"
+      ]
+    },
+    {
+      "id": "S8",
+      "category": "대화",
+      "symptom": "대화 화면이 실시간으로 안 바뀜",
+      "keywords": [
+        "push",
+        "reconnect",
+        "/api/push"
+      ],
+      "modules": [
+        "client",
+        "server.core"
+      ],
+      "look": [
+        {
+          "at": "ember/client/src/client.rs:180",
+          "why": "푸시 재연결",
+          "name": "reconnect_push"
+        },
+        {
+          "at": "ember/client/src/push.rs:74",
+          "why": "푸시 해석 실패",
+          "name": "decode"
+        },
+        {
+          "at": "ember/server/src/session.rs:439",
+          "why": "서버 푸시 구독",
+          "name": "subscribe"
+        }
+      ],
+      "steps": [
+        "앱을 껐다 켜면 보이는지",
+        "서버 로그에 /api/push 연결이 있는지"
+      ]
+    },
+    {
+      "id": "S9",
+      "category": "대화",
+      "symptom": "중단 버튼을 눌러도 에이전트가 계속 돎",
+      "keywords": [
+        "interrupt",
+        "중단"
+      ],
+      "modules": [
+        "server.core",
+        "server.agents"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/session.rs:1026",
+          "why": "중단 처리",
+          "name": "interrupt"
+        },
+        {
+          "at": "ember/server/src/api/mod.rs:657",
+          "why": "중단 API",
+          "name": "interrupt"
+        }
+      ],
+      "steps": [
+        "서버 컴퓨터에서 해당 CLI 프로세스가 남아 있는지"
+      ]
+    },
+    {
+      "id": "S10",
+      "category": "대화",
+      "symptom": "서버 재시작 뒤 진행 중이던 대화가 이어지지 않음",
+      "keywords": [
+        "shim",
+        "EMBER_SESSION_SHIM",
+        "rejoin",
+        "resume"
+      ],
+      "modules": [
+        "server.core",
+        "server.agents"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/session.rs:552",
+          "why": "세션 프로세스 살리기",
+          "name": "ensure_live"
+        },
+        {
+          "at": "ember/server/src/session_shim.rs:145",
+          "why": "서버보다 오래 사는 shim",
+          "name": "run_shim"
+        }
+      ],
+      "steps": [
+        "EMBER_SESSION_SHIM 설정",
+        "에이전트가 shim 재합류를 지원하는지 (rejoins_shim)"
+      ]
+    },
+    {
+      "id": "S11",
+      "category": "컴퓨터",
+      "symptom": "컴퓨터가 오프라인으로 나옴",
+      "keywords": [
+        "is unreachable",
+        "health check timed out",
+        "not healthy",
+        "오프라인"
+      ],
+      "modules": [
+        "server.computers",
+        "node",
+        "client"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/computers/mod.rs:1001",
+          "why": "상태 확인 시간 초과",
+          "name": "health check timed out"
+        },
+        {
+          "at": "ember/node/src/main.rs:13",
+          "why": "노드 토큰 필수",
+          "name": "EMBER_NODE_TOKEN"
+        },
+        {
+          "at": "ember/client/src/state.rs:33",
+          "why": "앱의 온라인 표시",
+          "name": "Reachability"
+        }
+      ],
+      "steps": [
+        "그 컴퓨터에서 ember-node가 돌고 있는지",
+        "노드 주소(8741)로 서버에서 접근되는지"
+      ]
+    },
+    {
+      "id": "S12",
+      "category": "컴퓨터",
+      "symptom": "세션을 다른 컴퓨터로 옮기기가 거부됨",
+      "keywords": [
+        "mid-turn",
+        "switch computers when the turn is over",
+        "is unreachable"
+      ],
+      "modules": [
+        "server.computers"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/computers/mod.rs:160",
+          "why": "턴 진행 중에는 거부",
+          "name": "mid-turn"
+        },
+        {
+          "at": "ember/server/src/computers/mod.rs:1081",
+          "why": "옮기기 처리",
+          "name": "switch"
+        }
+      ],
+      "steps": [
+        "에이전트 턴이 끝났는지",
+        "대상 컴퓨터가 온라인인지"
+      ]
+    },
+    {
+      "id": "S13",
+      "category": "컴퓨터",
+      "symptom": "새 컴퓨터 등록 코드가 안 먹힘",
+      "keywords": [
+        "enrol",
+        "expired",
+        "등록 코드"
+      ],
+      "modules": [
+        "server.computers",
+        "node"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/computers/enrol.rs:944",
+          "why": "코드 사용 처리 (실패는 한 가지 응답)",
+          "name": "redeem"
+        },
+        {
+          "at": "ember/server/src/computers/enrol.rs:911",
+          "why": "코드 발급·유효 시간",
+          "name": "mint"
+        }
+      ],
+      "steps": [
+        "코드를 발급한 지 오래됐는지",
+        "서버 로그에서 실제 거부 이유"
+      ]
+    },
+    {
+      "id": "S14",
+      "category": "컴퓨터",
+      "symptom": "파일 열기가 forbidden으로 거부됨",
+      "keywords": [
+        "ForbiddenPath",
+        "path must be absolute",
+        "EMBER_NODE_ROOTS"
+      ],
+      "modules": [
+        "node"
+      ],
+      "look": [
+        {
+          "at": "ember/node/src/api.rs:281",
+          "why": "허용 경로 밖이면 403",
+          "name": "Outside"
+        },
+        {
+          "at": "ember/node/src/policy.rs:73",
+          "why": "거부 경로 목록",
+          "name": "is_denied"
+        }
+      ],
+      "steps": [
+        "EMBER_NODE_ROOTS·EMBER_NODE_DENY 값"
+      ]
+    },
+    {
+      "id": "S15",
+      "category": "컴퓨터",
+      "symptom": "원격 브라우저가 안 열림",
+      "keywords": [
+        "find_chrome",
+        "chrome",
+        "egress",
+        "브라우저"
+      ],
+      "modules": [
+        "server.computers"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/browser/chrome.rs:14",
+          "why": "Chrome 실행 파일 찾기",
+          "name": "find_chrome"
+        },
+        {
+          "at": "ember/server/src/browser/mod.rs:159",
+          "why": "브라우저 열기",
+          "name": "open"
+        }
+      ],
+      "steps": [
+        "서버 컴퓨터에 Chrome이 설치돼 있는지",
+        "egress 컴퓨터가 온라인인지"
+      ]
+    },
+    {
+      "id": "S16",
+      "category": "협업",
+      "symptom": "다른 세션에 보낸 메시지가 도착 안 함",
+      "keywords": [
+        "a2a",
+        "missing or invalid runtime token",
+        "Disabled",
+        "RateLimited"
+      ],
+      "modules": [
+        "server.comm"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/a2a/mod.rs:113",
+          "why": "A2A 오류 종류 (꺼짐, 너무 많음)",
+          "name": "A2aError"
+        },
+        {
+          "at": "ember/server/src/a2a/mod.rs:800",
+          "why": "보내기",
+          "name": "send"
+        },
+        {
+          "at": "ember/server/src/a2a/mod.rs:950",
+          "why": "대기 메시지 전달",
+          "name": "flush"
+        }
+      ],
+      "steps": [
+        "EMBER_A2A 설정과 세션별 A2A 켜짐",
+        "받는 세션이 턴 중인지"
+      ]
+    },
+    {
+      "id": "S17",
+      "category": "협업",
+      "symptom": "루틴이 정해진 시각에 안 돎",
+      "keywords": [
+        "schedule",
+        "tick",
+        "already has 100 schedules",
+        "루틴"
+      ],
+      "modules": [
+        "server.comm"
+      ],
+      "look": [
+        {
+          "at": "ember/server/src/schedules/mod.rs:670",
+          "why": "실행 시점 확인",
+          "name": "tick"
+        },
+        {
+          "at": "ember/server/src/schedules/mod.rs:497",
+          "why": "프로젝트당 100개 제한",
+          "name": "MAX_SCHEDULES_PER_PROJECT"
+        }
+      ],
+      "steps": [
+        "서버가 그 시각에 켜져 있었는지",
+        "루틴이 일시정지 상태인지"
+      ]
+    },
+    {
+      "id": "S18",
+      "category": "IDE",
+      "symptom": "IDE 열기를 누르면 VS Code Web으로 열림",
+      "keywords": [
+        "fallback",
+        "vscode_fallback_url",
+        "Open IDE"
+      ],
+      "modules": [
+        "editor",
+        "app"
+      ],
+      "look": [
+        {
+          "at": "ember/editor/src/session.rs:142",
+          "why": "연결 실패 시 대체",
+          "name": "connect_tcp_or_fallback"
+        },
+        {
+          "at": "ember/editor/src/fallback.rs:61",
+          "why": "대체 URL 만들기",
+          "name": "vscode_fallback_url"
+        }
+      ],
+      "steps": [
+        "OSE 서버가 그 컴퓨터에 설치돼 있는지"
+      ]
+    },
+    {
+      "id": "S19",
+      "category": "웹 IDE",
+      "symptom": "웹 IDE 로그인이 안 됨",
+      "keywords": [
+        "사용자 이름 또는 비밀번호가 올바르지 않습니다",
+        "사용자 이름을 입력하세요",
+        "/login"
+      ],
+      "modules": [
+        "proxy"
+      ],
+      "look": [
+        {
+          "at": "ember/proxy/dpx/auth/api.py:193",
+          "why": "비밀번호 불일치",
+          "name": "_verify_pw"
+        },
+        {
+          "at": "ember/proxy/dpx/auth/api.py:103",
+          "why": "세션 쿠키 확인",
+          "name": "validate_session"
+        }
+      ],
+      "steps": [
+        "darkpyonix.db에 사용자가 있는지",
+        "DPX_USERNAME·DPX_PASSWORD 설정"
+      ]
+    },
+    {
+      "id": "S20",
+      "category": "웹 IDE",
+      "symptom": "웹 IDE 화면이 안 뜨거나 멈춤",
+      "keywords": [
+        "502",
+        "XMO_UPSTREAM_PORT",
+        "healthz"
+      ],
+      "modules": [
+        "proxy"
+      ],
+      "look": [
+        {
+          "at": "ember/proxy/dpx/config.py:16",
+          "why": "뒤 VS Code 서버 포트",
+          "name": "UPSTREAM_PORT"
+        },
+        {
+          "at": "ember/proxy/main.py:196",
+          "why": "요청 진입 로그",
+          "name": "logger"
+        }
+      ],
+      "steps": [
+        "/healthz 응답",
+        "프록시 로그에서 응답 없이 멈춘 요청"
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "F1",
+      "name": "대화에 메시지 보내기",
+      "desc": "앱 입력 → 서버 → 에이전트 CLI → 이벤트가 푸시로 앱에 돌아옴",
+      "steps": [
+        {
+          "module": "app",
+          "at": "ember/app/src/services.rs:116",
+          "what": "보낼 글을 클라이언트로",
+          "name": "send_message"
+        },
+        {
+          "module": "client",
+          "at": "ember/client/src/api.rs:929",
+          "what": "POST /api/sessions/{id}/messages",
+          "name": "send_message"
+        },
+        {
+          "module": "server.core",
+          "at": "ember/server/src/session.rs:807",
+          "what": "세션에 전달",
+          "name": "send"
+        },
+        {
+          "module": "server.agents",
+          "at": "ember/server/src/agents/claude_code.rs:706",
+          "what": "CLI stdin으로 전달",
+          "name": "send"
+        },
+        {
+          "module": "server.core",
+          "at": "ember/server/src/api/mod.rs:676",
+          "what": "이벤트를 /api/push로 내보냄",
+          "name": "push"
+        },
+        {
+          "module": "client",
+          "at": "ember/client/src/transcript.rs:126",
+          "what": "받은 이벤트를 대화 기록에 반영",
+          "name": "apply"
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "name": "에이전트 도구를 다른 컴퓨터에서 실행",
+      "desc": "에이전트는 메인 서버에, 명령은 세션의 현재 컴퓨터(노드)에서",
+      "steps": [
+        {
+          "module": "server.core",
+          "at": "ember/server/src/bin/ember-exec.rs:18",
+          "what": "Bash 도구가 부르는 shim 실행 파일",
+          "name": "main"
+        },
+        {
+          "module": "server.computers",
+          "at": "ember/server/src/computers/shim.rs:283",
+          "what": "명령을 원격 노드로 보냄",
+          "name": "run_remote"
+        },
+        {
+          "module": "node",
+          "at": "ember/node/src/api.rs:213",
+          "what": "노드의 /exec 웹소켓",
+          "name": "/exec"
+        },
+        {
+          "module": "node",
+          "at": "ember/node/src/exec.rs:141",
+          "what": "실제 프로세스 실행",
+          "name": "spawn_pipes"
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "name": "새 컴퓨터 등록",
+      "desc": "서버가 코드 발급 → 노드가 코드로 등록",
+      "steps": [
+        {
+          "module": "server.computers",
+          "at": "ember/server/src/computers/enrol.rs:911",
+          "what": "등록 코드 발급",
+          "name": "mint"
+        },
+        {
+          "module": "node",
+          "at": "ember/node/src/main.rs:59",
+          "what": "ember-node enrol <code> --server <url>",
+          "name": "enrol"
+        },
+        {
+          "module": "server.core",
+          "at": "ember/server/src/enrol_door.rs:176",
+          "what": "등록용 별도 HTTP 입구",
+          "name": "ENROL_REDEEM_PATH"
+        },
+        {
+          "module": "server.computers",
+          "at": "ember/server/src/computers/enrol.rs:944",
+          "what": "코드 확인, 컴퓨터 추가",
+          "name": "redeem"
+        }
+      ]
+    },
+    {
+      "id": "F4",
+      "name": "세션끼리 메시지 (A2A)",
+      "desc": "에이전트가 ember-a2a CLI로 다른 세션에 보냄",
+      "steps": [
+        {
+          "module": "server.comm",
+          "at": "ember/server/src/bin/ember-a2a.rs:3",
+          "what": "에이전트가 실행하는 CLI",
+          "name": "main"
+        },
+        {
+          "module": "server.comm",
+          "at": "ember/server/src/a2a/client.rs:195",
+          "what": "서버로 HTTP 요청",
+          "name": "send"
+        },
+        {
+          "module": "server.comm",
+          "at": "ember/server/src/a2a/mod.rs:800",
+          "what": "큐에 넣기, 권한·속도 제한",
+          "name": "send"
+        },
+        {
+          "module": "server.comm",
+          "at": "ember/server/src/a2a/mod.rs:950",
+          "what": "받는 세션이 한가할 때 전달",
+          "name": "flush"
+        },
+        {
+          "module": "server.core",
+          "at": "ember/server/src/session.rs:807",
+          "what": "받는 세션에 메시지로 들어감",
+          "name": "send"
+        }
+      ]
+    },
+    {
+      "id": "F5",
+      "name": "웹 IDE 접속",
+      "desc": "브라우저 → Python 프록시 → 뒤의 VS Code 서버",
+      "steps": [
+        {
+          "module": "proxy",
+          "at": "ember/proxy/main.py:192",
+          "what": "모든 요청이 먼저 지나감",
+          "name": "route_request"
+        },
+        {
+          "module": "proxy",
+          "at": "ember/proxy/dpx/auth/api.py:103",
+          "what": "세션 쿠키 확인",
+          "name": "validate_session"
+        },
+        {
+          "module": "proxy",
+          "at": "ember/proxy/main.py:265",
+          "what": "웹소켓 중계",
+          "name": "websocket_proxy"
+        },
+        {
+          "module": "proxy",
+          "at": "ember/proxy/dpx/config.py:18",
+          "what": "중계 대상 VS Code 서버",
+          "name": "UPSTREAM_BASE"
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "id": "I1",
+      "severity": "high",
+      "type": "보안",
+      "at": "ember/server/src/members.rs:209",
+      "what": "팀원 생성 요청의 key_env로 서버 환경 변수 값을 읽어 요청자가 정한 endpoint로 보냄",
+      "fix": "key_env를 허용 목록으로 제한하고 endpoint도 설정된 프록시만 허용"
+    },
+    {
+      "id": "I2",
+      "severity": "high",
+      "type": "보안",
+      "at": "ember/server/src/accounts/secrets.rs:159",
+      "what": "Windows에서 secret.key 권한 검사가 아무것도 안 함",
+      "fix": "Windows ACL로 소유자 전용 권한을 설정·검사"
+    },
+    {
+      "id": "I3",
+      "severity": "mid",
+      "type": "보안",
+      "at": "ember/proxy/dpx/auth/api.py:182",
+      "what": "웹 IDE 로그인에 시도 횟수 제한이 없음",
+      "fix": "IP·사용자별 실패 횟수 제한 추가"
+    },
+    {
+      "id": "I4",
+      "severity": "low",
+      "type": "보안",
+      "at": "ember/proxy/dpx/auth/api.py:198",
+      "what": "세션 쿠키에 secure 플래그가 없음",
+      "fix": "HTTPS 뒤에서 쓸 때 secure=True 설정"
+    },
+    {
+      "id": "I5",
+      "severity": "mid",
+      "type": "기능 미구현",
+      "at": "ember/app/src/ui/cr/session.rs:3975",
+      "what": "새 팀원 시트의 컴퓨터 목록이 하드코딩됨 (mac-mini 등)",
+      "fix": "서버의 컴퓨터 목록을 받아 쓰기"
+    },
+    {
+      "id": "I6",
+      "severity": "mid",
+      "type": "구조",
+      "at": "ember/app/src/ui/cr/mod.rs:1",
+      "what": "ui/와 ui/cr/에 같은 화면이 두 벌 (이전 중)",
+      "fix": "이전 끝난 화면부터 ui/ 쪽 원본 삭제"
+    },
+    {
+      "id": "I7",
+      "severity": "mid",
+      "type": "중복",
+      "at": "ember/client/src/wire.rs:1",
+      "what": "서버 이벤트 타입을 클라이언트에 손으로 복사",
+      "fix": "공유 테스트 벡터로 두 쪽 일치를 CI에서 검사"
+    },
+    {
+      "id": "I8",
+      "severity": "mid",
+      "type": "중복",
+      "at": "ember/app/src/demo.rs:1",
+      "what": "데모 데이터가 클라이언트 API 호출을 따로 흉내 냄",
+      "fix": "API를 바꿀 때 demo.rs도 함께 고치도록 테스트 추가"
+    },
+    {
+      "id": "I9",
+      "severity": "low",
+      "type": "설정",
+      "at": "ember/server/src/main.rs:253",
+      "what": "서버 HTTP 리스너에 로그인이 없고 loopback 기본값에 기댐",
+      "fix": "외부 바인딩 시 경고 또는 토큰 강제 확인 문서화"
+    },
+    {
+      "id": "I10",
+      "severity": "low",
+      "type": "거대 파일",
+      "at": "ember/app/src/ui/cr/vcs.rs",
+      "what": "5825줄 파일 (ui/vcs.rs도 5312줄)",
+      "fix": "화면 조각별로 파일 분리"
+    },
+    {
+      "id": "I11",
+      "severity": "low",
+      "type": "TODO",
+      "at": "ember/app/src/ui/cr/project.rs",
+      "what": "TODO 29개, ui/cr/ 전체에 TODO 집중",
+      "fix": "이슈로 옮기고 코드 TODO는 번호로 참조"
+    }
+  ],
+  "names": [
+    {
+      "name": "EMBER_DATA_DIR",
+      "kind": "환경 변수",
+      "module": "server.core",
+      "at": "ember/server/src/main.rs:25",
+      "meaning": "ember.db, secret.key, accounts/ 위치 (기본 ~/.ember)"
+    },
+    {
+      "name": "EMBER_LISTEN",
+      "kind": "환경 변수",
+      "module": "server.core",
+      "at": "ember/server/src/main.rs:26",
+      "meaning": "서버 주소 (기본 127.0.0.1:8740)",
+      "caution": "로그인 없는 API라 외부에 열면 위험"
+    },
+    {
+      "name": "server-token",
+      "kind": "파일",
+      "module": "server.core",
+      "at": "ember/server/src/auth.rs:46",
+      "meaning": "클라이언트가 내야 하는 서버 토큰 파일",
+      "caution": "지우면 모든 클라이언트 재설정 필요"
+    },
+    {
+      "name": "EMBER_SERVER_URL",
+      "kind": "환경 변수",
+      "module": "app",
+      "at": "ember/app/src/config.rs:26",
+      "meaning": "앱이 붙을 서버 주소"
+    },
+    {
+      "name": "EMBER_SERVER_TOKEN",
+      "kind": "환경 변수",
+      "module": "client",
+      "at": "ember/client/src/token.rs:179",
+      "meaning": "서버 토큰을 직접 줄 때"
+    },
+    {
+      "name": "EMBER_SESSION_SHIM",
+      "kind": "환경 변수",
+      "module": "server.agents",
+      "at": "ember/server/src/agents/proc.rs:66",
+      "meaning": "에이전트를 shim 아래 실행 (off로 끔)",
+      "caution": "끄면 서버 재시작 때 진행 중 턴이 끊김"
+    },
+    {
+      "name": "EMBER_SESSION_ID",
+      "kind": "환경 변수",
+      "module": "server.agents",
+      "at": "ember/server/src/agents/proc.rs:39",
+      "meaning": "spawn 전에 세션 id를 넘기는 내부 키",
+      "caution": "에이전트 시작 전에 제거됨"
+    },
+    {
+      "name": "EMBER_A2A",
+      "kind": "환경 변수",
+      "module": "server.comm",
+      "at": "ember/server/src/main.rs:281",
+      "meaning": "0 또는 off면 세션 간 메시지 끔"
+    },
+    {
+      "name": "EMBER_TRANSPORT",
+      "kind": "환경 변수",
+      "module": "transport",
+      "at": "ember/server/src/transport.rs:28",
+      "meaning": "1이면 서버가 P2P 전송을 켬"
+    },
+    {
+      "name": "EMBER_NODE_TOKEN",
+      "kind": "환경 변수",
+      "module": "node",
+      "at": "ember/node/src/main.rs:13",
+      "meaning": "서버가 노드에 내는 토큰 (필수)"
+    },
+    {
+      "name": "EMBER_NODE_ROOTS",
+      "kind": "환경 변수",
+      "module": "node",
+      "at": "ember/node/src/main.rs:15",
+      "meaning": "노드가 허용하는 경로 (기본 $HOME)"
+    },
+    {
+      "name": "LOCAL",
+      "kind": "상수",
+      "module": "server.computers",
+      "at": "ember/server/src/computers/mod.rs:71",
+      "meaning": "메인 서버 자신을 가리키는 컴퓨터 id",
+      "caution": "DB에 저장됨: 값 변경 금지"
+    },
+    {
+      "name": "AgentKind",
+      "kind": "enum",
+      "module": "server.agents",
+      "at": "ember/server/src/agents/mod.rs:33",
+      "meaning": "claude-code, codex, antigravity, ACP 이름",
+      "caution": "문자열이 DB에 저장됨"
+    },
+    {
+      "name": "PERMISSION_MODES",
+      "kind": "상수",
+      "module": "server.computers",
+      "at": "ember/server/src/projects/mod.rs:33",
+      "meaning": "ask, edits, plan, bypass 권한 모드"
+    },
+    {
+      "name": "DEFAULT_COOLDOWN_MS",
+      "kind": "상수",
+      "module": "server.agents",
+      "at": "ember/server/src/accounts/mod.rs:66",
+      "meaning": "한도 걸린 계정을 쉬게 하는 기본 시간 (1시간)"
+    },
+    {
+      "name": "MAX_SCHEDULES_PER_PROJECT",
+      "kind": "상수",
+      "module": "server.comm",
+      "at": "ember/server/src/schedules/mod.rs:44",
+      "meaning": "프로젝트당 루틴 최대 100개"
+    },
+    {
+      "name": "XMO_UPSTREAM_PORT",
+      "kind": "환경 변수",
+      "module": "proxy",
+      "at": "ember/proxy/dpx/config.py:16",
+      "meaning": "프록시 뒤 VS Code 서버 포트 (기본 9092)",
+      "caution": "XMO는 옛 이름"
+    },
+    {
+      "name": "SESSION_COOKIE",
+      "kind": "상수",
+      "module": "proxy",
+      "at": "ember/proxy/dpx/auth/api.py:35",
+      "meaning": "웹 IDE 로그인 쿠키 이름"
+    },
+    {
+      "name": "EMBER_CR_HOME_MODE",
+      "kind": "환경 변수 (EMBER_CR_* 묶음)",
+      "module": "app",
+      "at": "ember/app/src/ui/cr/home.rs:560",
+      "meaning": "앱 화면 미리보기·개발용 스위치",
+      "caution": "사용자 설정 아님: 30개 넘음"
+    },
+    {
+      "name": "HANDLER_NAME",
+      "kind": "상수",
+      "module": "bridge",
+      "at": "ember/bridge/src/messages.rs:24",
+      "meaning": "webview 쪽 emberBridge 핸들러 이름",
+      "caution": "IDE 창 스크립트와 같아야 함"
+    },
+    {
+      "name": "WIRE_VERSION",
+      "kind": "상수",
+      "module": "transport",
+      "at": "ember/transfer/src/wire.rs:11",
+      "meaning": "파일 전송 프로토콜 버전",
+      "caution": "올리면 옛 기기와 호환 확인"
+    }
+  ]
+}

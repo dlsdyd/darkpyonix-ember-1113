@@ -50,7 +50,9 @@ copied. If a task seems to need a path outside the repository, ask first.
 **The repository root is fixed.** The root holds one product folder, `ember/`, like core: `.github/`,
 `.gitignore`, `.vscode/`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `PROJECT.md`, `README.md`, `docs/`,
 `ember/` and `extensions/`, plus the ignored `.claude/` and `.scratch/`. [user, 2026-10-04: the
-root holds one product folder like core; the previous root set was never approved.] A new root
+root holds one product folder like core; the previous root set was never approved.] `vibemap/`
+holds the codebase map (map data, scripts and viewer; see `vibemap/README.md`). [user, 2026-11-20:
+"저장소 안으로 옮겨", choosing the root `vibemap/` over `docs/vibemap/`.] A new root
 entry is added only after the user approves it, and the approval is recorded beside it with the
 date and the user's quote. Rust crates live in `ember/<name>/`, the VS Code Web wrapper in
 `ember/proxy/`, the OSE build pipeline in `ember/ose/`, shared test vectors in `ember/vectors/`,

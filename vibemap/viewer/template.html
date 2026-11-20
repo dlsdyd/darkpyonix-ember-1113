@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vibemap</title>
+<style>
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --ink:#1f2328; --ink2:#57606a; --ink3:#8b949e;
+  --line:#e6e6e3; --soft:#f0f0ed; --accent:#2f6fde; --accent-soft:#e8f0fd;
+  --use:#2f6fde; --user:#d9822b; --high:#d1453b; --mid:#d9822b; --low:#8b949e; --ok:#2e9a5b;
+  --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  --l0:#5b7cc9; --l1:#4f9a8a; --l2:#b07c3b; --l3:#8a6bbf; --l4:#c0607a; --l5:#6b8f3a;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141517; --panel:#1c1e21; --ink:#e6e6e6; --ink2:#a9b0b8; --ink3:#6e7681;
+  --line:#2c2f33; --soft:#23262a; --accent:#6ea0ff; --accent-soft:#1e2a40;
+  --use:#6ea0ff; --user:#f0a252; --shadow:none;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em}
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.head{max-width:1180px;margin:0 auto;padding:18px 28px 0}
+.title-row{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em}
+.meta{color:var(--ink3);font-size:13px}
+.search{margin:14px 0 12px;position:relative}
+.search input{width:100%;padding:13px 16px 13px 44px;border-radius:var(--radius);border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);font:inherit;font-size:16px;outline:none;box-shadow:var(--shadow)}
+.search input:focus{border-color:var(--accent)}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--ink3)}
+.search kbd{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--ink3);
+  border:1px solid var(--line);border-radius:6px;padding:1px 6px;background:var(--soft)}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{background:none;border:none;padding:10px 14px;color:var(--ink2);border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+nav .n{color:var(--ink3);font-size:12px;margin-left:4px}
+main{max-width:1180px;margin:0 auto;padding:28px 28px 120px}
+.hint{color:var(--ink3);font-size:13px;margin:0 0 18px}
+.empty{color:var(--ink3);padding:48px 0;text-align:center}
+h2{font-size:15px;margin:0 0 4px;font-weight:650}
+h3{font-size:13px;margin:22px 0 8px;color:var(--ink3);font-weight:600;letter-spacing:.02em}
+
+/* 개요 */
+.summary{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:28px}
+@media(max-width:820px){.summary{grid-template-columns:1fr}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.box p{margin:0}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px}
+.stat b{display:block;font-size:20px;font-weight:700}
+.stat span{color:var(--ink3);font-size:12px}
+.run{display:flex;flex-direction:column;gap:6px}
+.run div{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.run span{color:var(--ink2);font-size:13px;white-space:nowrap}
+.run .loc{min-width:0}
+
+/* 지도 */
+.legend{display:flex;gap:16px;color:var(--ink3);font-size:13px;margin-bottom:14px;flex-wrap:wrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.layer{display:grid;grid-template-columns:170px 1fr;gap:18px;padding:18px 0;border-top:1px solid var(--line)}
+.layer:first-of-type{border-top:none}
+@media(max-width:820px){.layer{grid-template-columns:1fr}}
+.layer-name{font-weight:650;display:flex;align-items:center;gap:8px}
+.layer-desc{color:var(--ink3);font-size:13px;margin-top:2px}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.mod{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c,var(--line));border-radius:10px;
+  padding:11px 13px;text-align:left;transition:opacity .12s,border-color .12s,transform .12s;box-shadow:var(--shadow)}
+.mod:hover{transform:translateY(-1px)}
+.mod .nm{font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.mod .ol{color:var(--ink2);font-size:13px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mod .ft{color:var(--ink3);font-size:12px;margin-top:6px}
+.chips.hovering .mod{opacity:.28}
+.chips.hovering .mod.me{opacity:1;border-color:var(--ink)}
+.chips.hovering .mod.is-use{opacity:1;outline:2px solid var(--use);outline-offset:-1px}
+.chips.hovering .mod.is-user{opacity:1;outline:2px solid var(--user);outline-offset:-1px}
+.status{font-size:11px;padding:1px 7px;border-radius:99px;background:var(--soft);color:var(--ink3);font-weight:500;white-space:nowrap}
+.status.carded{background:var(--accent-soft);color:var(--accent)}
+.status.verified{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+
+/* 카드 리스트 */
+.list{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow)}
+.card.flash{animation:flash 1.4s}
+@keyframes flash{0%{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}100%{}}
+.card .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.card .sub{color:var(--ink2);font-size:14px;margin-top:4px}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.tag{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--soft);color:var(--ink2);border:none}
+button.tag:hover{background:var(--accent-soft);color:var(--accent)}
+.rows{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.row{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.row .why{color:var(--ink2);font-size:14px}
+.loc{border:1px solid var(--line);background:var(--soft);border-radius:6px;padding:1px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--ink);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.loc:hover{border-color:var(--accent);color:var(--accent)}
+details summary{cursor:pointer;color:var(--ink3);font-size:13px;margin-top:10px;list-style:none}
+details summary::before{content:"▸ ";}
+details[open] summary::before{content:"▾ ";}
+ol.steps{margin:8px 0 0;padding-left:20px;color:var(--ink2);font-size:14px}
+.sev{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.sev.high{background:color-mix(in srgb,var(--high) 14%,transparent);color:var(--high)}
+.sev.mid{background:color-mix(in srgb,var(--mid) 14%,transparent);color:var(--mid)}
+.sev.low{background:var(--soft);color:var(--ink3)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.filters button{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:4px 12px;font-size:13px;color:var(--ink2)}
+.filters button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* 흐름 */
+.flow{position:relative;margin-top:12px;padding-left:4px}
+.fstep{display:grid;grid-template-columns:28px 1fr;gap:12px;padding-bottom:14px;position:relative}
+.fstep::before{content:"";position:absolute;left:13px;top:26px;bottom:0;width:2px;background:var(--line)}
+.fstep:last-child::before{display:none}
+.fnum{width:28px;height:28px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--ink2);border:2px solid var(--c,var(--line))}
+.fbody .what{font-size:14px}
+
+/* 이름 */
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+.name{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.name .k{color:var(--ink3);font-size:12px}
+.name .mean{font-size:14px;margin-top:2px}
+.name .cau{font-size:13px;color:var(--user);margin-top:4px}
+
+/* 검색 결과 */
+.group{margin-bottom:26px}
+.res{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);
+  background:var(--panel);border-radius:10px;text-align:left;width:100%;margin-bottom:6px}
+.res:hover{border-color:var(--accent)}
+.res .r1{font-weight:550}
+.res .r2{color:var(--ink3);font-size:13px}
+mark{background:color-mix(in srgb,#f5c542 40%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+
+/* 서랍 */
+.shade{position:fixed;inset:0;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .15s;z-index:30}
+.shade.on{opacity:1;pointer-events:auto}
+aside{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);background:var(--panel);border-left:1px solid var(--line);
+  transform:translateX(100%);transition:transform .18s ease;z-index:31;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.08)}
+aside.on{transform:none}
+.dhead{position:sticky;top:0;background:var(--panel);padding:20px 24px 14px;border-bottom:1px solid var(--line);z-index:1}
+.dhead .x{position:absolute;right:16px;top:16px;border:none;background:var(--soft);border-radius:8px;width:32px;height:32px}
+.dtitle{font-size:19px;font-weight:700;padding-right:40px}
+.dbody{padding:6px 24px 40px}
+.lead{font-size:16px;margin:14px 0 4px}
+.item{padding:10px 0;border-bottom:1px solid var(--soft)}
+.item:last-child{border-bottom:none}
+.item .nm{font-weight:600;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+.item .what{color:var(--ink2);font-size:14px}
+.breaks{font-size:13px;color:var(--user);margin-top:2px}
+.ask{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.ask button{text-align:left;border:1px dashed var(--line);background:none;border-radius:10px;padding:10px 12px;font-size:14px;color:var(--ink2)}
+.ask button:hover{border-color:var(--accent);color:var(--accent)}
+.flist{font-size:13px}
+.flist .f{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--soft)}
+.flist .s{color:var(--ink3);font-size:12px;padding:0 0 6px 0}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);
+  padding:8px 16px;border-radius:99px;font-size:14px;opacity:0;transition:.18s;z-index:50;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.banner{background:var(--accent-soft);color:var(--ink);border-radius:var(--radius);padding:14px 18px;margin-bottom:22px;font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="head">
+  <div class="title-row"><h1 id="pname">vibemap</h1><span class="meta" id="pmeta"></span></div>
+  <div class="search">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" placeholder="증상, 화면 문구, 함수·파일 이름으로 찾기  (예: 로그인 안 됨, createOrder)" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
+  <nav id="tabs"></nav>
+</div></header>
+<main id="main"></main>
+<div class="shade" id="shade"></div>
+<aside id="drawer"><div class="dhead"><div class="dtitle" id="dtitle"></div><div class="meta" id="dmeta"></div><button class="x" id="dx" aria-label="닫기">✕</button></div><div class="dbody" id="dbody"></div></aside>
+<div class="toast" id="toast"></div>
+
+<script>
+const D = /*__VIBEMAP_DATA__*/null;
+const RAW = (D && D.raw) || null;
+const HAS_MAP = !!(D && D.map && (D.map.modules||[]).length);
+const MAP = (D && D.map) || {};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LCOL = ["var(--l0)","var(--l1)","var(--l2)","var(--l3)","var(--l4)","var(--l5)"];
+const STATUS = {none:"명함 없음", draft:"초안", carded:"명함", verified:"검증됨"};
+const SEV = {high:"높음", mid:"중간", low:"낮음"};
+
+/* ---------- 데이터 정리 ---------- */
+function pathsOf(m){ return (typeof m.path === "string" ? [m.path] : (m.path||[])).map(p => p.replace(/\/$/,"")); }
+let MODS = [];
+if (HAS_MAP) MODS = MAP.modules.map(m => ({...m, status: m.status || "draft"}));
+else if (RAW) MODS = RAW.modules.map(r => ({id:r.id, name:r.path.split("/").pop() || r.id, path:r.path, one_line:"", status:"none"}));
+const MBY = Object.fromEntries(MODS.map(m => [m.id, m]));
+
+// raw 모듈/파일 → map 모듈 (가장 긴 경로 접두사)
+function ownerOf(path){
+  let best=null, len=-1;
+  for (const m of MODS) for (const p of pathsOf(m)){
+    if ((p === "" || p === "." || path === p || path.startsWith(p + "/")) && p.length > len){ best = m.id; len = p.length; }
+  }
+  return best;
+}
+const RAW2MAP = {};
+if (RAW) for (const r of RAW.modules) RAW2MAP[r.id] = HAS_MAP ? ownerOf(r.path === "(root)" ? "" : r.path) : r.id;
+for (const m of MODS){ m._uses = new Set(); m._users = new Set(); m._loc = 0; m._files = 0; m._depth = 0; }
+if (RAW){
+  for (const r of RAW.modules){ const o = MBY[RAW2MAP[r.id]]; if (o){ o._loc += r.loc; o._files += r.files; o._depth = Math.max(o._depth, r.depth); } }
+  for (const [a,b] of RAW.module_edges){
+    const A = RAW2MAP[a], B = RAW2MAP[b];
+    if (A && B && A !== B){ MBY[A]._uses.add(B); MBY[B]._users.add(A); }
+  }
+}
+// 층
+let LAYERS = (MAP.layers||[]).map(l => ({...l, modules:(l.modules||[]).filter(id => MBY[id])}));
+const inLayer = new Set(LAYERS.flatMap(l => l.modules));
+const rest = MODS.filter(m => !inLayer.has(m.id));
+if (!LAYERS.length && MODS.length){
+  const maxd = Math.max(...MODS.map(m => m._depth));
+  for (let d = maxd; d >= 0; d--){
+    const ms = MODS.filter(m => m._depth === d).map(m => m.id);
+    if (ms.length) LAYERS.push({id:"d"+d, name: d === maxd ? "가장 위 (다른 모듈을 많이 부름)" : d === 0 ? "가장 아래 (기반)" : `중간 ${maxd - d}`, desc:"import 관계로 자동 추정", modules: ms});
+  }
+} else if (rest.length){
+  LAYERS.push({id:"_etc", name:"층 미지정", desc:"map.json layers에 없는 모듈", modules: rest.map(m => m.id)});
+}
+LAYERS.forEach((l,i) => l.modules.forEach(id => { MBY[id]._layer = i; MBY[id]._color = LCOL[i % LCOL.length]; }));
+
+const SYMS = MAP.symptoms||[], FLOWS = MAP.flows||[], ISSUES = MAP.issues||[], NAMES = MAP.names||[];
+
+/* ---------- 공통 조각 ---------- */
+const loc = at => at ? `<button class="loc" data-copy="${esc(at)}" title="클릭해서 복사">${esc(at)}</button>` : "";
+const modTag = id => MBY[id] ? `<button class="tag" data-mod="${esc(id)}"><i class="dot" style="background:${MBY[id]._color||"var(--line)"};width:7px;height:7px;margin-right:5px"></i>${esc(MBY[id].name)}</button>` : `<span class="tag">${esc(id)}</span>`;
+const fmt = n => (n||0).toLocaleString("ko-KR");
+function hl(text, terms){
+  let s = esc(text);
+  for (const t of terms){ if (!t) continue; const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "gi"); s = s.replace(re, m => `<mark>${m}</mark>`); }
+  return s;
+}
+
+/* ---------- 탭 ---------- */
+const TABS = [
+  ["map","지도", MODS.length],
+  ["symptoms","증상으로 찾기", SYMS.length],
+  ["flows","흐름", FLOWS.length],
+  ["issues","문제점", ISSUES.length],
+  ["names","이름 사전", NAMES.length],
+];
+let tab = (location.hash.slice(1).split("/")[0]) || "map";
+if (!TABS.some(t => t[0] === tab)) tab = "map";
+function renderTabs(){
+  $("#tabs").innerHTML = TABS.map(([k,l,n]) => `<button data-tab="${k}" class="${tab===k && !query ? "on":""}">${l}${n ? `<span class="n">${n}</span>`:""}</button>`).join("");
+}
+
+/* ---------- 지도 ---------- */
+function viewMap(){
+  const p = MAP.project || {};
+  const highs = ISSUES.filter(i => i.severity === "high").length;
+  const carded = MODS.filter(m => m.status === "carded" || m.status === "verified").length;
+  let h = "";
+  if (!HAS_MAP) h += `<div class="banner">아직 map.json이 없어 코드에서 자동 추출한 구조만 보입니다. 가이드의 1단계(지도)부터 진행하면 명함과 증상이 채워집니다.</div>`;
+  h += `<div class="summary"><div class="box">
+      <p style="font-size:16px">${esc(p.summary || "프로젝트 요약이 아직 없습니다.")}</p>
+      <div class="stats">
+        <div class="stat"><b>${fmt(RAW?.totals?.loc)}</b><span>코드 줄</span></div>
+        <div class="stat"><b>${fmt(RAW?.totals?.files)}</b><span>파일</span></div>
+        <div class="stat"><b>${MODS.length}</b><span>모듈 (명함 ${carded})</span></div>
+        <div class="stat"><b>${SYMS.length}</b><span>증상</span></div>
+        <div class="stat"><b style="color:${highs?"var(--high)":"inherit"}">${highs}</b><span>심각한 문제</span></div>
+      </div></div>
+    <div class="box"><h2>실행 방법</h2><div class="run" style="margin-top:8px">${
+      (p.how_to_run||[]).map(r => `<div><span>${esc(r.label)}</span><button class="loc" data-copy="${esc(r.cmd)}">${esc(r.cmd)}</button></div>`).join("") || `<span class="meta">아직 없음</span>`
+    }</div></div></div>`;
+  h += `<div class="legend"><span>모듈에 마우스를 올리면</span><span><i class="dot" style="background:var(--use)"></i>그 모듈이 부르는 모듈</span><span><i class="dot" style="background:var(--user)"></i>그 모듈을 부르는 모듈</span><span>클릭하면 명함</span></div>`;
+  h += `<div class="chips-wrap">`;
+  for (const l of LAYERS){
+    h += `<section class="layer"><div><div class="layer-name"><i class="dot" style="background:${MBY[l.modules[0]]?._color}"></i>${esc(l.name)}</div><div class="layer-desc">${esc(l.desc||"")}</div></div><div class="chips">`;
+    for (const id of l.modules){
+      const m = MBY[id];
+      h += `<button class="mod" data-mod="${esc(id)}" style="--c:${m._color}">
+        <div class="nm"><span>${esc(m.name)}</span><span class="status ${m.status}">${STATUS[m.status]||m.status}</span></div>
+        <div class="ol">${esc(m.one_line || pathsOf(m).join(", "))}</div>
+        <div class="ft">${fmt(m._loc)}줄 · 파일 ${m._files}</div></button>`;
+    }
+    h += `</div></section>`;
+  }
+  h += `</div>`;
+  return h;
+}
+
+/* ---------- 증상 ---------- */
+function symCard(s){
+  return `<div class="card" id="sym-${esc(s.id)}">
+    <div class="top"><div><h2>${esc(s.symptom)}</h2>${s.keywords?.length ? `<div class="meta">${esc(s.keywords.join(" · "))}</div>`:""}</div></div>
+    <div class="tags">${(s.modules||[]).map(modTag).join("")}</div>
+    <div class="rows">${(s.look||[]).map(l => `<div class="row">${loc(l.at)}<span class="why">${esc(l.why||"")}</span></div>`).join("")}</div>
+    ${(s.steps||[]).length ? `<details><summary>확인 순서 ${s.steps.length}단계</summary><ol class="steps">${s.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol></details>`:""}
+    <details><summary>에이전트에게 물어보기</summary><div class="ask">${askBtn("이 증상 원인 찾기", promptSymptom(s))}</div></details>
+  </div>`;
+}
+function viewSymptoms(){
+  if (!SYMS.length) return `<div class="empty">증상 지도가 아직 없습니다. 가이드 3단계에서 만듭니다.</div>`;
+  const cats = [...new Set(SYMS.map(s => s.category).filter(Boolean))];
+  let h = `<p class="hint">겪고 있는 문제와 가장 비슷한 것을 찾으세요. 위치를 누르면 복사됩니다.</p>`;
+  if (cats.length){
+    for (const c of cats) h += `<h3>${esc(c)}</h3><div class="list">${SYMS.filter(s => s.category===c).map(symCard).join("")}</div>`;
+    const etc = SYMS.filter(s => !s.category);
+    if (etc.length) h += `<h3>기타</h3><div class="list">${etc.map(symCard).join("")}</div>`;
+  } else h += `<div class="list">${SYMS.map(symCard).join("")}</div>`;
+  return h;
+}
+
+/* ---------- 흐름 ---------- */
+function viewFlows(){
+  if (!FLOWS.length) return `<div class="empty">흐름이 아직 없습니다. 가이드 4단계에서 만듭니다.</div>`;
+  return `<p class="hint">핵심 기능이 실제로 어떤 순서로 코드를 지나가는지 보여 줍니다.</p><div class="list">` + FLOWS.map(f => `
+    <div class="card" id="flow-${esc(f.id)}"><h2>${esc(f.name)}</h2>${f.desc?`<div class="sub">${esc(f.desc)}</div>`:""}
+    <div class="flow">${(f.steps||[]).map((s,i) => `<div class="fstep"><div class="fnum" style="--c:${MBY[s.module]?._color||"var(--line)"}">${i+1}</div>
+      <div class="fbody"><div class="what">${esc(s.what||"")}</div><div class="row" style="margin-top:3px">${s.module?modTag(s.module):""}${loc(s.at)}</div></div></div>`).join("")}</div></div>`).join("") + `</div>`;
+}
+
+/* ---------- 문제점 ---------- */
+let sevFilter = "all";
+function viewIssues(){
+  if (!ISSUES.length) return `<div class="empty">정리된 문제점이 아직 없습니다. 가이드 5단계에서 만듭니다.</div>`;
+  const counts = {all: ISSUES.length};
+  ISSUES.forEach(i => counts[i.severity] = (counts[i.severity]||0) + 1);
+  const list = ISSUES.filter(i => sevFilter === "all" || i.severity === sevFilter)
+    .sort((a,b) => ["high","mid","low"].indexOf(a.severity) - ["high","mid","low"].indexOf(b.severity));
+  return `<div class="filters">${[["all","전체"],["high","높음"],["mid","중간"],["low","낮음"]].filter(([k]) => counts[k]).map(([k,l]) =>
+      `<button data-sev="${k}" class="${sevFilter===k?"on":""}">${l} ${counts[k]}</button>`).join("")}</div>
+    <div class="list">${list.map(i => `<div class="card" id="iss-${esc(i.id)}"><div class="top"><div>
+      <h2>${esc(i.what)}</h2><div class="row" style="margin-top:6px">${loc(i.at)}${i.type?`<span class="tag">${esc(i.type)}</span>`:""}</div></div>
+      <span class="sev ${i.severity}">${SEV[i.severity]||i.severity}</span></div>
+      ${i.fix?`<div class="sub" style="margin-top:8px">→ ${esc(i.fix)}</div>`:""}
+      <details><summary>에이전트에게 물어보기</summary><div class="ask">${askBtn("이 문제 고치기 (계획 먼저)", promptIssue(i))}</div></details></div>`).join("")}</div>`;
+}
+
+/* ---------- 이름 ---------- */
+function viewNames(){
+  if (!NAMES.length) return `<div class="empty">이름 사전이 아직 없습니다. 가이드 4단계에서 만듭니다.</div>`;
+  const groups = {};
+  NAMES.forEach(n => (groups[n.module || "_"] ||= []).push(n));
+  let h = `<p class="hint">코드에서 모르는 이름을 만났을 때. 함수·파일 이름은 위 검색창에서도 바로 찾을 수 있습니다.</p>`;
+  for (const [mid, ns] of Object.entries(groups)){
+    h += `<h3>${MBY[mid] ? esc(MBY[mid].name) : "공통"}</h3><div class="names">` + ns.map(n => `<div class="name" id="name-${esc(n.name)}">
+      <div class="row"><code>${esc(n.name)}</code><span class="k">${esc(n.kind||"")}</span></div>
+      <div class="mean">${esc(n.meaning||"")}</div>${n.caution?`<div class="cau">⚠ ${esc(n.caution)}</div>`:""}
+      <div style="margin-top:6px">${loc(n.at)}</div></div>`).join("") + `</div>`;
+  }
+  return h;
+}
+
+/* ---------- 검색 ---------- */
+let query = "";
+function viewSearch(){
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const match = (...fields) => { const t = fields.join(" ").toLowerCase(); return terms.every(x => t.includes(x)); };
+  const groups = [];
+  const sy = SYMS.filter(s => match(s.symptom, (s.keywords||[]).join(" "), s.category||"", (s.look||[]).map(l => l.at+" "+l.why).join(" ")));
+  if (sy.length) groups.push(["증상", sy.map(s => res(hl(s.symptom, terms), (s.modules||[]).map(id => MBY[id]?.name||id).join(" · "), `data-go="symptoms" data-target="sym-${esc(s.id)}"`))]);
+  const ms = MODS.filter(m => match(m.name, m.id, m.one_line||"", pathsOf(m).join(" "), (m.entry_points||[]).map(e => e.name).join(" "), (m.contracts||[]).map(e => e.name).join(" "), (m.problems||[]).map(p => p.symptom).join(" ")));
+  if (ms.length) groups.push(["모듈", ms.map(m => res(hl(m.name, terms), hl(m.one_line || pathsOf(m).join(", "), terms), `data-mod="${esc(m.id)}"`))]);
+  const ns = NAMES.filter(n => match(n.name, n.meaning||"", n.caution||""));
+  if (ns.length) groups.push(["이름", ns.map(n => res(`<code>${hl(n.name, terms)}</code>`, hl(n.meaning||"", terms), `data-go="names" data-target="name-${esc(n.name)}"`))]);
+  const fl = FLOWS.filter(f => match(f.name, f.desc||"", (f.steps||[]).map(s => s.what+" "+(s.at||"")).join(" ")));
+  if (fl.length) groups.push(["흐름", fl.map(f => res(hl(f.name, terms), `${(f.steps||[]).length}단계`, `data-go="flows" data-target="flow-${esc(f.id)}"`))]);
+  const is = ISSUES.filter(i => match(i.what, i.at||"", i.type||"", i.fix||""));
+  if (is.length) groups.push(["문제점", is.map(i => res(hl(i.what, terms), `${SEV[i.severity]||""} · ${esc(i.at||"")}`, `data-go="issues" data-target="iss-${esc(i.id)}"`))]);
+  if (RAW){
+    const syms = [];
+    const isTest = p => /(^|\/)(tests?|__tests__|spec|e2e|mocks?)(\/|$)|[._](test|spec)\.[a-z]+$|_test\.go$|\/test_[^/]*\.py$/.test(p);
+    const ordered = [...RAW.files.filter(f => !isTest(f.p)), ...RAW.files.filter(f => isTest(f.p))];
+    for (const f of ordered){
+      for (const [n, line] of f.s){ if (match(n)) { syms.push([n, f.p, line, f.m]); if (syms.length > 40) break; } }
+      if (syms.length > 40) break;
+    }
+    if (syms.length) groups.push(["함수·클래스 (코드에서 추출)", syms.slice(0,40).map(([n,p,l,m]) => res(`<code>${hl(n, terms)}</code>`, `${esc(MBY[RAW2MAP[m]]?.name || m)} · ${esc(p)}:${l}`, `data-copy="${esc(p)}:${l}"`))]);
+    const fs = RAW.files.filter(f => match(f.p)).slice(0, 30);
+    if (fs.length) groups.push(["파일", fs.map(f => res(hl(f.p, terms), `${esc(MBY[RAW2MAP[f.m]]?.name || f.m)} · ${f.l}줄`, `data-file="${esc(f.p)}"`))]);
+    const rs = (RAW.routes||[]).filter(r => match(r[0], r[1], r[2])).slice(0, 20);
+    if (rs.length) groups.push(["API 경로", rs.map(r => res(`<code>${esc(r[0])} ${hl(r[1], terms)}</code>`, esc(r[2]), `data-copy="${esc(r[2])}"`))]);
+  }
+  if (!groups.length) return `<div class="empty">“${esc(query)}”와 맞는 결과가 없습니다.<br><span style="font-size:13px">화면 문구로 찾으려면 터미널에서: <code>python3 vibemap/scripts/extract.py --find "${esc(query)}"</code></span></div>`;
+  return groups.map(([t, items]) => `<div class="group"><h3>${t} ${items.length}</h3>${items.join("")}</div>`).join("");
+}
+const res = (a, b, attrs) => `<button class="res" ${attrs}><div><div class="r1">${a}</div><div class="r2">${b}</div></div><span class="meta">›</span></button>`;
+
+/* ---------- 서랍: 모듈 명함 ---------- */
+function openModule(id){
+  const m = MBY[id]; if (!m) return;
+  $("#dtitle").innerHTML = `${esc(m.name)} <span class="status ${m.status}" style="vertical-align:middle">${STATUS[m.status]||m.status}</span>`;
+  $("#dmeta").innerHTML = `${pathsOf(m).map(p => `<code>${esc(p)}/</code>`).join(" ")} · ${fmt(m._loc)}줄 · 파일 ${m._files}`;
+  let h = `<p class="lead">${esc(m.one_line || "명함이 아직 작성되지 않았습니다.")}</p>`;
+  if (m._uses.size || m._users.size){
+    h += `<h3>연결</h3>`;
+    if (m._uses.size) h += `<div class="row" style="margin-bottom:6px"><span class="meta" style="min-width:86px"><i class="dot" style="background:var(--use)"></i>부르는 모듈</span><div class="tags" style="margin:0">${[...m._uses].map(modTag).join("")}</div></div>`;
+    if (m._users.size) h += `<div class="row"><span class="meta" style="min-width:86px"><i class="dot" style="background:var(--user)"></i>나를 부름</span><div class="tags" style="margin:0">${[...m._users].map(modTag).join("")}</div></div>`;
+  }
+  if (m.entry_points?.length) h += `<h3>시작점: 여기서부터 읽으세요</h3>` + m.entry_points.map(e => `<div class="item"><div class="row"><span class="nm">${esc(e.name)}</span>${loc(e.at)}</div><div class="what">${esc(e.what||"")}</div></div>`).join("");
+  if (m.contracts?.length) h += `<h3>약속: 다른 모듈이 쓰는 것</h3>` + m.contracts.map(c => `<div class="item"><div class="row"><span class="nm">${esc(c.name)}</span>${loc(c.at)}</div><div class="what">${esc(c.what||"")}</div>${c.breaks_if?`<div class="breaks">바꾸면 → ${esc(c.breaks_if)}</div>`:""}</div>`).join("");
+  if (m.problems?.length) h += `<h3>자주 나는 문제</h3>` + m.problems.map(p => `<div class="item"><div class="what" style="color:var(--ink)">${esc(p.symptom)}</div><div class="row" style="margin-top:3px">${/:\d+$/.test(p.check||"") ? loc(p.check) : `<span class="why">→ ${esc(p.check||"")}</span>`}</div></div>`).join("");
+  if (m.cautions?.length) h += `<h3>주의</h3>` + m.cautions.map(c => `<div class="item breaks" style="font-size:14px">⚠ ${esc(c)}</div>`).join("");
+  const rel = SYMS.filter(s => (s.modules||[]).includes(id));
+  if (rel.length) h += `<h3>관련 증상</h3><div class="tags">${rel.map(s => `<button class="tag" data-go="symptoms" data-target="sym-${esc(s.id)}">${esc(s.symptom)}</button>`).join("")}</div>`;
+  h += `<h3>에이전트에게 물어보기</h3><div class="ask">${askBtn("이 모듈 구조 설명해 줘", promptModule(m))}${askBtn("이 모듈에서 수정하고 싶은 게 있어", promptChange(m))}${m.status!=="verified"?askBtn("이 모듈 명함 만들기/고치기", promptCard(m)):""}</div>`;
+  if (RAW){
+    const files = RAW.files.filter(f => RAW2MAP[f.m] === id).sort((a,b) => b.fi - a.fi || b.l - a.l);
+    h += `<details><summary>파일 ${files.length}개 (많이 쓰이는 순)</summary><div class="flist">${files.slice(0,150).map(f => `
+      <div><div class="f"><button class="loc" data-file="${esc(f.p)}">${esc(f.p)}</button><span class="meta">${f.l}줄${f.fi?` · ${f.fi}곳에서 씀`:""}</span></div>
+      ${f.s.length?`<div class="s">${f.s.slice(0,8).map(s => esc(s[0])).join(", ")}${f.s.length>8?" …":""}</div>`:""}</div>`).join("")}</div></details>`;
+  }
+  openDrawer(h);
+}
+function openFile(p){
+  const f = RAW?.files.find(x => x.p === p); if (!f) return;
+  const owner = RAW2MAP[f.m];
+  $("#dtitle").textContent = p.split("/").pop();
+  $("#dmeta").innerHTML = `<code>${esc(p)}</code> · ${f.l}줄 · ${f.fi}곳에서 import`;
+  let h = `<div class="tags">${owner?modTag(owner):""}</div><h3>공개 함수·클래스</h3>`;
+  h += f.s.length ? f.s.map(([n,l]) => `<div class="item"><div class="row"><span class="nm">${esc(n)}</span>${loc(p+":"+l)}</div></div>`).join("") : `<p class="meta">추출된 공개 심볼이 없습니다.</p>`;
+  h += `<h3>에이전트에게 물어보기</h3><div class="ask">${askBtn("이 파일 설명해 줘", promptFile(p, owner))}</div>`;
+  openDrawer(h);
+}
+function openDrawer(h){ $("#dbody").innerHTML = h; $("#drawer").classList.add("on"); $("#shade").classList.add("on"); $("#drawer").scrollTop = 0; }
+function closeDrawer(){ $("#drawer").classList.remove("on"); $("#shade").classList.remove("on"); }
+
+/* ---------- 프롬프트 (필요할 때만 상세를 묻기) ---------- */
+const askBtn = (label, text) => `<button data-copy="${esc(text)}" data-copymsg="프롬프트를 복사했습니다. 에이전트에 붙여 넣으세요">💬 ${esc(label)}<div class="meta" style="margin-top:2px">클릭하면 프롬프트 복사</div></button>`;
+const RULE = "\n\n규칙: 먼저 위 명령의 출력만 보고 시작해. 파일은 필요한 함수 부근만 줄 범위로 읽고, 서브 에이전트는 쓰지 마. 답은 짧게.";
+const promptModule = m => `python3 vibemap/scripts/build.py --card ${m.id} 를 실행해서 '${m.name}' 모듈 명함을 읽어.\n그다음 시작점 함수들만 읽고, 이 모듈이 어떤 순서로 동작하는지 5줄 이내로 설명해 줘.` + RULE;
+const promptChange = m => `python3 vibemap/scripts/build.py --card ${m.id} 를 실행해서 '${m.name}' 모듈 명함을 읽어.\n바꾸고 싶은 것: [여기에 적기]\n\n코드를 고치기 전에 (1) 고칠 위치 path:line (2) 수정안 (3) 함께 고쳐야 하는 곳과 영향 범위를 먼저 보여 줘. 내가 확인하면 그때 고쳐.` + RULE;
+const promptCard = m => `vibemap/VIBEMAP_GUIDE.md 의 '2단계: 명함'을 모듈 '${m.id}' 하나에 대해서만 수행해 줘.` ;
+const promptSymptom = s => `python3 vibemap/scripts/build.py --symptom ${s.id} 를 실행해서 증상과 관련 모듈 명함을 읽어.\n실제 증상: [여기에 구체적으로: 무엇을 했고, 무엇을 기대했고, 무엇이 일어났는지, 에러 메시지]\n\n'볼 곳'부터 확인해서 원인을 찾아 줘. 고치기 전에 원인, 수정안, 영향 범위를 먼저 보여 줘.` + RULE;
+const promptIssue = i => `vibemap/data/map.json 의 이슈 ${i.id} (${i.what}, ${i.at}) 를 고치려고 해.\n해당 위치를 읽고, 이걸 쓰는 곳을 grep으로 찾은 뒤 (1) 수정안 (2) 함께 고쳐야 하는 곳 (3) 확인 방법을 먼저 보여 줘. 내가 확인하면 그때 고쳐.` + RULE;
+const promptFile = (p, owner) => `${owner ? `python3 vibemap/scripts/build.py --card ${owner} 로 소속 모듈 명함을 먼저 읽고, ` : ""}${p} 파일이 하는 일과 주요 함수를 5줄 이내로 설명해 줘.` + RULE;
+
+/* ---------- 렌더 & 이벤트 ---------- */
+function render(){
+  renderTabs();
+  const v = query ? viewSearch() : ({map:viewMap, symptoms:viewSymptoms, flows:viewFlows, issues:viewIssues, names:viewNames}[tab] || viewMap)();
+  $("#main").innerHTML = v;
+}
+function go(t, target){
+  query = ""; $("#q").value = ""; tab = t; history.replaceState(null, "", "#" + t); closeDrawer(); render();
+  if (target){ const el = document.getElementById(target); if (el){ el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1500);} }
+  else window.scrollTo({top:0});
+}
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), 1600); }
+async function copy(text, msg){
+  try { await navigator.clipboard.writeText(text); }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+  toast(msg || `복사됨: ${text.length > 60 ? text.slice(0,60)+"…" : text}`);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-copy],[data-mod],[data-tab],[data-go],[data-sev],[data-file]");
+  if (!b) return;
+  if (b.dataset.copy !== undefined){ e.stopPropagation(); return copy(b.dataset.copy, b.dataset.copymsg); }
+  if (b.dataset.tab) return go(b.dataset.tab);
+  if (b.dataset.go) return go(b.dataset.go, b.dataset.target);
+  if (b.dataset.sev){ sevFilter = b.dataset.sev; return render(); }
+  if (b.dataset.file) return openFile(b.dataset.file);
+  if (b.dataset.mod) return openModule(b.dataset.mod);
+});
+document.addEventListener("mouseover", e => {
+  const b = e.target.closest(".chips .mod"); const wrap = document.querySelector(".chips-wrap");
+  if (!wrap) return;
+  wrap.querySelectorAll(".chips").forEach(c => c.classList.toggle("hovering", !!b));
+  wrap.querySelectorAll(".mod").forEach(x => x.classList.remove("me","is-use","is-user"));
+  if (!b) return;
+  const m = MBY[b.dataset.mod];
+  wrap.querySelectorAll(".mod").forEach(x => {
+    const id = x.dataset.mod;
+    if (id === m.id) x.classList.add("me"); else if (m._uses.has(id)) x.classList.add("is-use"); else if (m._users.has(id)) x.classList.add("is-user");
+  });
+});
+$("#q").addEventListener("input", e => { query = e.target.value.trim(); render(); });
+$("#shade").addEventListener("click", closeDrawer);
+$("#dx").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape"){ if ($("#drawer").classList.contains("on")) closeDrawer(); else if (query){ query=""; $("#q").value=""; render(); } }
+  if (e.key === "/" && document.activeElement !== $("#q")){ e.preventDefault(); $("#q").focus(); }
+});
+
+(function init(){
+  if (!D){ $("#main").innerHTML = `<div class="empty">데이터가 없습니다. <code>python3 vibemap/scripts/build.py</code>로 만든 vibemap/out/vibemap.html을 여세요.</div>`; return; }
+  const p = MAP.project || {};
+  const name = p.name || "vibemap";
+  $("#pname").textContent = name; document.title = name + " · vibemap";
+  const structure = {tech:"기술 종류별 구조", feature:"기능별 구조", layer:"역할·계층별 구조"}[p.structure || RAW?.structure_hint] || "";
+  $("#pmeta").textContent = [structure, (p.commit || RAW?.commit) && "commit " + (p.commit || RAW.commit), (p.updated || RAW?.generated) && "갱신 " + (p.updated || RAW.generated)].filter(Boolean).join(" · ");
+  render();
+})();
+</script>
+</body>
+</html>
